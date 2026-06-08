@@ -182,6 +182,7 @@ const App = {
       uuid: Utils.generateUUID(),
       workflows: "",
       commands: "",
+      default: "",
       inputs_texts: [],
       inputs_images: [],
       outputs: []
@@ -360,6 +361,7 @@ const App = {
     document.getElementById('coreEditTitle').textContent = isNew ? "新建核心配置" : "编辑核心配置";
 
     document.getElementById('core-commands').value = data.commands || "";
+    document.getElementById('core-default').value = typeof data.default === 'string' ? data.default : (data.default ? JSON.stringify(data.default) : "");
     this.renderWorkflowsSelect();
 
     const renderList = (arrayName, containerId, fieldsRenderer) => {
