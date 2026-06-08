@@ -55,6 +55,10 @@
             <label>Commands (触发词)</label>
             <input type="text" id="core-commands" placeholder="例如: 触发词" onchange="app.updateEditingCore('commands', this.value)">
           </div>
+          <div class="form-group flex-1">
+            <label>Default (默认变量)</label>
+            <input type="text" id="core-default" placeholder="请输入与 var_name 关联的 default 配置" onchange="app.updateEditingCore('default', this.value)">
+          </div>
         </div>
 
         <div class="list-section">
