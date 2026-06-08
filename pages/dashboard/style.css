@@ -49,7 +49,9 @@ body {
 }
 .tab-btn:hover { color: var(--primary-color); }
 .tab-btn.active {
-  color: var(--primary-color); font-weight: bold; border-bottom-color: var(--primary-color);
+  color: var(--primary-color);
+  text-shadow: 0 0 .65px var(--primary-color), 0 0 .65px var(--primary-color);
+  border-bottom-color: var(--primary-color);
 }
 
 .app-main { padding: 20px; max-width: 1200px; margin: 0 auto; }
