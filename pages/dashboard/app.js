@@ -274,7 +274,7 @@ const App = {
       Store.editingCoreData = null;
       Store.editingCoreIndex = -1;
 
-      Utils.showToast("配置已持久化保存");
+      Utils.showToast("配置已保存");
       this.renderView();
     } catch (err) {
       Utils.showToast("保存到服务器失败", "error");
@@ -415,7 +415,7 @@ const App = {
     }
 
     if (currentKey === 'core' && Store.editingCoreData) {
-      Utils.showToast("请先点击表单右上角的【提交并持久化保存】", "error");
+      Utils.showToast("请先点击表单右上角的【提交并保存】", "error");
       return;
     }
 
