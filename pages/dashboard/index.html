@@ -88,13 +88,76 @@
     </section>
 
     <section id="promptConfig" class="view-section">
-      <h2>Prompt 配置 (提示词管理)</h2>
-      <p class="placeholder-text">UI 待实装</p>
+      <div class="edit-area-header">
+        <h2>Prompt 模板独立配置</h2>
+        <button class="btn btn-primary" onclick="app.savePromptConfig()">提交并保存</button>
+      </div>
+
+      <details class="list-section" open>
+        <summary class="section-header" style="cursor: pointer; outline: none;">
+          <h3 style="display: inline-block;">框架 (framework)</h3>
+        </summary>
+        <div style="margin-top: 10px;">
+          <button class="btn btn-sm" onclick="app.addPromptArrayItem('framework')">+ 新增框架</button>
+          <div id="prompt-framework-container" class="items-container" style="margin-top: 15px;"></div>
+        </div>
+      </details>
+
+      <details class="list-section" open>
+        <summary class="section-header" style="cursor: pointer; outline: none;">
+          <h3 style="display: inline-block;">描述 (description)</h3>
+        </summary>
+        <div style="margin-top: 10px;">
+          <button class="btn btn-sm" onclick="app.addPromptArrayItem('description')">+ 新增描述</button>
+          <div id="prompt-description-container" class="items-container" style="margin-top: 15px;"></div>
+        </div>
+      </details>
+
+      <details class="list-section" open>
+        <summary class="section-header" style="cursor: pointer; outline: none;">
+          <h3 style="display: inline-block;">触发词 (trigger)</h3>
+        </summary>
+        <div style="margin-top: 10px;">
+          <button class="btn btn-sm" onclick="app.addPromptArrayItem('trigger')">+ 新增触发词</button>
+          <div id="prompt-trigger-container" class="items-container" style="margin-top: 15px;"></div>
+        </div>
+      </details>
     </section>
 
     <section id="telegramConfig" class="view-section">
-      <h2>Telegram 交互配置</h2>
-      <p class="placeholder-text">UI 待实装</p>
+      <div class="config-list-header">
+        <h2>已保存的 Telegram 交互配置</h2>
+        <button class="btn btn-primary" onclick="app.createNewTelegram()">+ 新建 Telegram 配置</button>
+      </div>
+      <div id="telegramConfigList" class="config-list-container"></div>
+      <hr class="section-divider">
+      <div id="telegramEditArea" class="edit-area" style="display: none;">
+        <div class="edit-area-header">
+          <h2 id="telegramEditTitle">正在编辑 Telegram 配置</h2>
+          <button class="btn btn-primary" onclick="app.saveTelegramConfig()">提交并保存</button>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>配置名称 (name)</label>
+            <input type="text" id="telegram-name" onchange="app.updateTelegramField('name', this.value)" placeholder="例如: 默认绘画引导流">
+          </div>
+          <div class="form-group flex-1">
+            <label>关联核心配置 (绑定 Core)</label>
+            <select id="telegram-core-id" onchange="app.updateTelegramField('core_id', this.value)">
+              <option value="">-- 请选择关联的核心配置 --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="list-section">
+          <div class="section-header">
+            <h3>对话引导 (dialog)</h3>
+            <button class="btn btn-sm" onclick="app.addTelegramDialog()">+ 新增对话节点</button>
+          </div>
+          <div id="telegram-dialog-container" class="items-container"></div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -110,7 +173,6 @@
   </dialog>
 
   <div id="toastContainer" class="toast-container"></div>
-
   <datalist id="workflow-nodes"></datalist>
   <datalist id="workflow-keys"></datalist>
 
