@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AstrBot JSON 配置管理</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="tabs" id="navTabs">
+      <button class="tab-btn active" data-target="coreConfig">核心配置管理</button>
+      <button class="tab-btn" data-target="promptConfig">Prompt 配置管理</button>
+      <button class="tab-btn" data-target="telegramConfig">Telegram 交互配置</button>
+    </div>
+    <div class="actions">
+      <button id="btnImport" class="btn btn-secondary">导入配置合并</button>
+      <button id="btnExport" class="btn btn-primary">导出当前配置</button>
+      <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section id="coreConfig" class="view-section active">
+      <div class="config-list-header">
+        <h2>已保存的核心配置</h2>
+        <button class="btn btn-primary" onclick="app.createNewCore()">+ 新建配置</button>
+      </div>
+      <div id="coreConfigList" class="config-list-container"></div>
+
+      <hr class="section-divider">
+
+      <div id="coreEditArea" class="edit-area" style="display: none;">
+        <div class="edit-area-header">
+          <h2 id="coreEditTitle">正在编辑配置</h2>
+          <button class="btn btn-primary" onclick="app.saveCoreConfig()">💾 提交并持久化保存</button>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>Workflows (关联工作流)</label>
+            <div class="input-with-btn">
+              <select id="core-workflows" onchange="app.updateEditingCore('workflows', this.value)">
+                <option value="">-- 请选择工作流 --</option>
+              </select>
+              <button class="btn btn-secondary" onclick="document.getElementById('workflowUpload').click()">上传到服务器</button>
+              <input type="file" id="workflowUpload" accept=".json" style="display: none;" onchange="app.uploadWorkflow(event)">
+            </div>
+            <small class="hint-text">上传后的 workflow 会保存在后端并用于节点智能提示</small>
+          </div>
+          <div class="form-group flex-1">
+            <label>Commands (触发词)</label>
+            <input type="text" id="core-commands" placeholder="例如: 触发词" onchange="app.updateEditingCore('commands', this.value)">
+          </div>
+        </div>
+
+        <div class="list-section">
+          <div class="section-header">
+            <h3>文本输入 (inputs_texts)</h3>
+            <button class="btn btn-sm" onclick="app.addCoreArrayItem('inputs_texts')">+ 新增文本</button>
+          </div>
+          <div id="core-inputs-texts-container" class="items-container"></div>
+        </div>
+
+        <div class="list-section">
+          <div class="section-header">
+            <h3>图片输入 (inputs_images)</h3>
+            <button class="btn btn-sm" onclick="app.addCoreArrayItem('inputs_images')">+ 新增图片</button>
+          </div>
+          <div id="core-inputs-images-container" class="items-container"></div>
+        </div>
+
+        <div class="list-section">
+          <div class="section-header">
+            <h3>输出节点 (outputs)</h3>
+            <button class="btn btn-sm" onclick="app.addCoreArrayItem('outputs')">+ 新增输出</button>
+          </div>
+          <div id="core-outputs-container" class="items-container"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="promptConfig" class="view-section">
+      <h2>Prompt 配置 (提示词管理)</h2>
+      <p class="placeholder-text">UI 待实装</p>
+    </section>
+
+    <section id="telegramConfig" class="view-section">
+      <h2>Telegram 交互配置</h2>
+      <p class="placeholder-text">UI 待实装</p>
+    </section>
+  </main>
+
+  <dialog id="confirmModal" class="custom-dialog">
+    <div class="dialog-content">
+      <h3 id="dialogTitle">操作确认</h3>
+      <p id="dialogMessage">你确定要执行此操作吗？</p>
+      <div class="dialog-footer">
+        <button id="dialogBtnCancel" class="btn btn-secondary">取消</button>
+        <button id="dialogBtnConfirm" class="btn btn-danger">确认</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <datalist id="workflow-nodes"></datalist>
+  <datalist id="workflow-keys"></datalist>
+
+  <script src="/api/plugin/page/bridge-sdk.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
