@@ -208,10 +208,20 @@ const App = {
     copied.outputs.forEach(i => i.uuid = Utils.generateUUID());
     copied.commands = copied.commands ? copied.commands + " (副本)" : "未命名 (副本)";
 
-    Store.data.core.push(copied);
+    try {
+      await bridge.apiPost("save_item", {
+        category: "core",
+        filename: `${copied.uuid}.json`,
+        data: copied
+      });
 
-    // 修改数组结构后立即同步到后端
-    this.renderView();
+      Store.data.core.push(copied);
+      Utils.showToast("配置已复制");
+      this.renderView();
+    } catch (err) {
+      Utils.showToast("复制失败，无法写入服务器文件", "error");
+      console.error(err);
+    }
   },
 
   deleteCore(index) {
