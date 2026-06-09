@@ -17,7 +17,8 @@ class Storage:
             "core": self.data_dir / "configs",
             "prompt": self.data_dir / "prompt",
             "telegram": self.data_dir / "telegram",
-            "workflows": self.data_dir / "workflows"
+            "workflows": self.data_dir / "workflows",
+            "outputs": self.data_dir / "outputs"
         }
 
         # 确保目录存在
