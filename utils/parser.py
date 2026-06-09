@@ -1,4 +1,4 @@
-from storage import *
+from .storage import *
 
 class Parser:
     def __init__(self,name:str,debug = False):
