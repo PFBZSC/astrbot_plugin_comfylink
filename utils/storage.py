@@ -4,11 +4,15 @@ from pathlib import Path
 
 
 class Storage:
-    def __init__(self, name):
+    def __init__(self, name,debug=False):
         self.name = name
 
         # 初始化持久化存储目录
         self.data_dir = Path(get_astrbot_data_path()) / "plugin_data" / name
+
+        if debug:
+            self.data_dir = Path(get_astrbot_data_path()).parents[3] / "plugin_data" / name
+            print(self.data_dir)
 
         self.dirs = {
             "core": self.data_dir / "configs",
@@ -75,7 +79,6 @@ class Storage:
 
         result = {} if category == "workflows" else []
         dir_path = self.dirs[category]
-
         for file_path in dir_path.glob("*.json"):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
@@ -102,3 +105,6 @@ class Storage:
                 return json.load(f)
         except Exception:
             return None
+
+if __name__ == "__main__":
+    st = Storage("astrbot_plugin_comfylink",debug=True)
