@@ -36,7 +36,7 @@ class MyPlugin(Star):
             yield event.plain_result("无参调用")
 
         elif result["success"]:# 指令调用
-            data = self.parser.data2comfy(result["data"])
+            data = self.parser.parse_comfy_data(result["data"])
 
             # TODO 图片上传
             # inputs_images = result["data"]["inputs_images"]
