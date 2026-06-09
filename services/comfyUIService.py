@@ -38,43 +38,31 @@ class ComfyUIService:
                             continue
 
                         task_ctx = self.active_tasks[prompt_id]
+                        queue = task_ctx["queue"]
 
-                        # 1. 收集单个节点的执行结果
+                        # 1. 某个节点完成，立刻放入队列
                         if event_type == "executed":
                             node_id = event_data.get("node")
                             output = event_data.get("output")
-                            # 将产物存入该任务的临时缓存区
-                            task_ctx["outputs"][node_id] = output
+                            listen_nodes = task_ctx["listen"]
 
-                        # 2. 监听整个工作流是否执行结束 (node 为 None 代表队列中的该任务已完成)
+                            # 如果节点在目标列表内（或未指定列表），立刻塞入队列
+                            if not listen_nodes or node_id in listen_nodes:
+                                # 使用 put_nowait 防止阻塞 WS 监听器
+                                queue.put_nowait({"type": "node_result", "node": node_id, "output": output})
+
+                        # 2. 整个工作流执行结束
                         elif event_type == "executing":
                             if event_data.get("node") is None:
-                                # 结算时刻：根据 listen 列表提取目标数据
-                                listen_nodes = task_ctx["listen"]
-                                final_result = {}
+                                queue.put_nowait({"type": "done"})
 
-                                if listen_nodes:
-                                    # 只提取指定的节点产物
-                                    for nid in listen_nodes:
-                                        if nid in task_ctx["outputs"]:
-                                            final_result[nid] = task_ctx["outputs"][nid]
-                                else:
-                                    # 如果未指定 listen，则返回所有收集到的产物
-                                    final_result = task_ctx["outputs"]
-
-                                task_ctx["future"].set_result(final_result)
-
-                        # 3. 异常处理保持不变
+                        # 3. 异常处理
                         elif event_type == "execution_error":
                             error_msg = event_data.get("exception_message")
-                            task_ctx["future"].set_exception(Exception(f"渲染出错: {error_msg}"))
+                            queue.put_nowait({"type": "error", "message": error_msg})
 
     async def send(self, workflow_data: dict, listen: list = None):
-        """
-        提交任务并挂起
-        :param workflow_data: 工作流 JSON 字典
-        :param listen: 需要监听并返回产物的 node_id 列表，例如 ["9", "15"]
-        """
+        """提交任务，并逐个 yield 产出监听节点的执行结果"""
         listen = listen or []
         payload = {"prompt": workflow_data, "client_id": self.client_id}
 
@@ -85,19 +73,30 @@ class ComfyUIService:
                     raise ValueError(f"提交失败: {reply['error']}")
                 prompt_id = reply["prompt_id"]
 
-        loop = asyncio.get_running_loop()
-        fut = loop.create_future()
-
-        # 升级上下文结构，携带 future、listen 配置和暂存区
+        # 为当前任务创建专属队列
+        queue = asyncio.Queue()
         self.active_tasks[prompt_id] = {
-            "future": fut,
-            "listen": [str(n) for n in listen],  # 确保转为字符串以匹配 WS 返回的 ID 格式
-            "outputs": {}
+            "queue": queue,
+            "listen": [str(n) for n in listen]
         }
 
         try:
-            return await fut
+            # 持续从队列消费并抛出，直到收到结束信号
+            while True:
+                result = await queue.get()
+
+                if result["type"] == "done":
+                    break  # 任务彻底结束，退出生成器
+
+                elif result["type"] == "error":
+                    raise Exception(f"渲染出错: {result['message']}")
+
+                elif result["type"] == "node_result":
+                    # 组装为字典直接 yield 给外层
+                    yield {result["node"]: result["output"]}
+
         finally:
+            # 无论成功或报错，清理上下文
             self.active_tasks.pop(prompt_id, None)
 
     async def query(self, prompt_id: str):
