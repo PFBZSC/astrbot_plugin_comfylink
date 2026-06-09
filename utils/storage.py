@@ -58,6 +58,19 @@ class Storage:
         except Exception:
             return False
 
+    def save_file(self, category: str, filename: str, data) -> bool:
+        """保存文件"""
+        if category not in self.dirs:
+            return False
+
+        file_path = self.dirs[category] / filename
+        try:
+            with open(file_path, "wb") as f:
+                f.write(data)
+            return True
+        except Exception:
+            return False
+
     def delete_item(self, category: str, filename: str) -> bool:
         """删除单条 JSON 数据"""
         if category not in self.dirs:
