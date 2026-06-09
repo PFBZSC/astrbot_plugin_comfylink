@@ -1,0 +1,7 @@
+{
+  "url": {
+    "description": "配置url",
+    "type":"string",
+    "default": "http://127.0.0.1:8188"
+  }
+}
