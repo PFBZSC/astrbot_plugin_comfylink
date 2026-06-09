@@ -37,16 +37,19 @@ class MyPlugin(Star):
 
         elif result["success"]:# 指令调用
             data = self.parser.parse_comfy_data(result["data"])
-
             # TODO 图片上传
             # inputs_images = result["data"]["inputs_images"]
-
             listen = [each["id"] for each in result["data"]["outputs"]]
-
-            result = await self.comfy_service.send(data, listen=listen)
-
             yield event.plain_result(str(data))
-            yield event.plain_result(str(result))
+
+
+            try:
+                async for partial_result in self.comfy_service.send(data, listen=listen):
+                    # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
+                    # 收到一个，就立刻给用户发一条消息
+                    yield event.plain_result(f"节点完成: {partial_result}")
+            except Exception as e:
+                yield event.plain_result(f"执行异常: {e}")
 
         else:
             yield event.plain_result("输入有误")
