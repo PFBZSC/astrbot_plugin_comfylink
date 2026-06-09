@@ -67,3 +67,38 @@ class Storage:
             except Exception:
                 return False
         return False
+
+    def get_category(self, category: str):
+        """获取指定分类目录下的所有 JSON 数据"""
+        if category not in self.dirs:
+            return None
+
+        result = {} if category == "workflows" else []
+        dir_path = self.dirs[category]
+
+        for file_path in dir_path.glob("*.json"):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if category == "workflows":
+                        result[file_path.name] = data
+                    else:
+                        result.append(data)
+            except Exception:
+                continue
+        return result
+
+    def get_file(self, category: str, filename: str):
+        """获取指定分类目录下的单个 JSON 文件数据"""
+        if category not in self.dirs:
+            return None
+
+        file_path = self.dirs[category] / filename
+        if not file_path.exists():
+            return None
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
