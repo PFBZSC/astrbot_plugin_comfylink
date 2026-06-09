@@ -12,7 +12,6 @@ class Storage:
 
         if debug:
             self.data_dir = Path(get_astrbot_data_path()).parents[3] / "plugin_data" / name
-            print(self.data_dir)
 
         self.dirs = {
             "core": self.data_dir / "configs",

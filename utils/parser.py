@@ -15,7 +15,6 @@ class Parser:
         tmp = cmd.split(maxsplit=1)
         _config_name = tmp[0] # 1.配置
         if len(tmp) != 2:
-            print("无传参")
             result = {"config_name":_config_name}
             return {"success":True,"data":result}
         cmd = tmp[1]
@@ -23,13 +22,13 @@ class Parser:
         # 解析2.默认参
         _default = ''
         if (i := cmd.find("--")) == -1:
-            _default = cmd[:i].strip()
+            _default = cmd.strip()
             cmd = ''
         elif i > 1:
             _default = cmd[:i].strip()
             cmd = cmd[i:]
         # 解析3.显式参
-        args = [e.split(":") for e in [each.strip() for each in cmd.strip().split('--') if each.strip()]]
+        args = [e.split(":",1) for e in [each.strip() for each in cmd.strip().split('--') if each.strip()]]
         result = self.parse_data(_config_name,_default,args)
         if result:
             return {"success":True,"data":result}
@@ -77,5 +76,5 @@ class Parser:
 
 if __name__ == "__main__":
     p = Parser("astrbot_plugin_comfylink",debug=True)
-    data = p.parse_cmd("draw zit 提示 词 哦 --cfg:1280")
+    data = p.parse_cmd("draw zit 提示词")
     print(data)
