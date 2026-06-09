@@ -1,6 +1,25 @@
 from .storage import *
 from astrbot.api import logger
 
+
+def parse_result(outputs:dict, source:dict):
+    source = source[ id := list(source.keys())[0]] # type:{...}
+    conf = {} # id type text
+    for each in outputs:
+        if each["id"] == id:
+            conf = each
+            break
+    if not conf:
+        return None
+    if conf.get("type") == "image":
+        # TODO:逻辑优化
+        tmp = source["images"][0]
+        return (tmp["filename"], tmp["subfolder"], tmp["type"]),conf.get('text', "")
+    else:
+        # TODO:文本解析
+        return None
+
+
 class Parser:
     def __init__(self,name:str,debug = False):
         self.name = name
