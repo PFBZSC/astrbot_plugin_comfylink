@@ -14,3 +14,17 @@ class MyPlugin(Star):
         self.api_service.register()
 
         self.parser = Parser(self.name)
+
+        @filter.command("draw")
+        async def draw(self, event: AstrMessageEvent):
+            result = self.parser.parse_cmd(event.message_str)
+            if result == {'success': True, 'data': {}}:
+                if event.get_platform_name() == "telegram":
+                    # TODO:Telegram
+                    pass
+                yield event.plain_result("TODO:TG")
+            elif result["success"]:
+                # TODO:Send to ComfyUIService
+                yield event.plain_result("TODO:Send")
+            else:
+                yield event.plain_result("输入有误")
