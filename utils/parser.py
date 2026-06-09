@@ -1,4 +1,5 @@
 from .storage import *
+from astrbot.api import logger
 
 class Parser:
     def __init__(self,name:str,debug = False):
@@ -36,7 +37,7 @@ class Parser:
             return {"success":False,"data":{}}
 
     def parse_data(self,config_name:str,default:str,args:list):
-        data = {"config_name":config_name,"inputs":[]}
+        data = {"config_name":config_name,"workflows":"","inputs_texts":[],"inputs_images":[],"outputs":[]}
         # -----解析实际键-----
         config_list = self.st.get_category("core")
         # 查找对应配置
@@ -44,6 +45,7 @@ class Parser:
         for each in config_list:
             if each['commands'] == config_name:
                 config_json = each
+                data["workflows"] = config_json["workflows"]
                 break
         if not config_json:
             #没找到配置
@@ -59,30 +61,47 @@ class Parser:
 
         for each in config_json["inputs_texts"]:
             if value:=arg_dict.get(each["var_name"],""):
-                data["inputs"].append({
+                data["inputs_texts"].append({
                     "id":each["id"],
                     "key_name":each["key_name"],
                     "value":value
                 })
-            elif value:=each.get("default",""):
-                data["inputs"].append({
+            elif each.get("default",""):
+                data["inputs_texts"].append({
                     "id": each["id"],
                     "key_name": each["key_name"],
                     "value": each["default"]
                 })
 
+
+        for each in config_json["inputs_images"]:
+            data["inputs_images"].append({
+                "id":each["id"],
+                "key_name":each["key_name"],
+                "value":""
+            })
+
+        for each in config_json["outputs"]:
+            data["outputs"].append({
+                "id":each["id"],
+                "type":each["type"],
+                "text":each["text"]
+            })
+
+
+
         return data
 
-    def data2comfy(self,data:dict):
-        config = self.st.get_file("workflows",data["config_name"])
+    def data2comfy(self,data:list):
+        config = self.st.get_file("workflows",data["workflows"])
         if not config:
             return {}
-        for each in data["inputs"]:
-            config[each["id"]]["inputs"]["key_name"] = each["value"]
+        for each in data["inputs_texts"]:
+            config[each["id"]]["inputs"][each["key_name"]] = each["value"]
         return config
-
 
 if __name__ == "__main__":
     p = Parser("astrbot_plugin_comfylink",debug=True)
-    data = p.parse_cmd("draw zit 提示词")
-    print(data)
+    result = p.parse_cmd("draw zit 提示词")
+    inputs_texts = p.data2comfy(result["data"])
+    print(inputs_texts)
