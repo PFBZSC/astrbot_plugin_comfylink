@@ -26,6 +26,8 @@ class MyPlugin(Star):
             yield event.plain_result("TODO:TG")
         elif result["success"]:
             # TODO:Send to ComfyUIService
+            # data = self.parser.data2comfy(result["data"])
+            # res = self.comfy.send(data)
             yield event.plain_result("TODO:Send")
         else:
             yield event.plain_result("输入有误")

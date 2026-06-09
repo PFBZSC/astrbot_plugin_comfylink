@@ -73,6 +73,14 @@ class Parser:
 
         return data
 
+    def data2comfy(self,data:dict):
+        config = self.st.get_file("workflows",data["config_name"])
+        if not config:
+            return {}
+        for each in data["inputs"]:
+            config[each["id"]]["inputs"]["key_name"] = each["value"]
+        return config
+
 
 if __name__ == "__main__":
     p = Parser("astrbot_plugin_comfylink",debug=True)
