@@ -92,7 +92,7 @@ class Parser:
 
         return data
 
-    def data2comfy(self,data:list):
+    def parse_comfy_data(self, data:list):
         config = self.st.get_file("workflows",data["workflows"])
         if not config:
             return {}
@@ -103,5 +103,5 @@ class Parser:
 if __name__ == "__main__":
     p = Parser("astrbot_plugin_comfylink",debug=True)
     result = p.parse_cmd("draw zit 提示词")
-    inputs_texts = p.data2comfy(result["data"])
+    inputs_texts = p.parse_comfy_data(result["data"])
     print(inputs_texts)
