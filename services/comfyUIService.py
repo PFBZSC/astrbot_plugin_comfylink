@@ -111,10 +111,26 @@ class ComfyUIService:
             async with session.post(f"{self.http_url}/interrupt") as resp:
                 return resp.status == 200
 
-    async def upload_image(self, image_bytes: bytes, filename: str = "upload.png"):
-        """上传图片到 ComfyUI 的 input 目录"""
+    async def upload_image(self, image_bytes: bytes, filename: str = None):
+        """上传图片到 ComfyUI 的 input 目录（支持自动识别格式与唯一命名）"""
+
+        # 1. 尝试从字节流中识别文件类型（需要事先引入 python-magic，或通过前几个字节判断）
+        # 这里提供一个轻量且无外部依赖的纯字节判断方案：
+        if image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            ext, mime = '.png', 'image/png'
+        elif image_bytes.startswith(b'\xff\xd8\xff'):
+            ext, mime = '.jpg', 'image/jpeg'
+        elif image_bytes.startswith(b'RIFF') and image_bytes[8:12] == b'WEBP':
+            ext, mime = '.webp', 'image/webp'
+        else:
+            ext, mime = '.png', 'image/png'  # 兜底方案
+
+        # 2. 如果未指定文件名，使用 UUID 防止并发覆盖，并拼接正确后缀
+        if not filename:
+            filename = f"{uuid.uuid4()}{ext}"
+
         data = aiohttp.FormData()
-        data.add_field('image', image_bytes, filename=filename, content_type='image/png')
+        data.add_field('image', image_bytes, filename=filename, content_type=mime)
         data.add_field('overwrite', 'true')
 
         async with aiohttp.ClientSession() as session:
