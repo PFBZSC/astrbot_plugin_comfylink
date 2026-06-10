@@ -20,7 +20,7 @@ def parse_result(outputs:list[dict], source:dict):
     return None,None,None
 
 def parse_cmd(cmd:str,config_list):
-    cmd = cmd[4:].strip() # 剥离前缀
+    cmd = cmd.split(maxsplit=1)[1].strip() # 剥离前缀
 
     # 1.配置 2.默认参 3.参数1 4.参数2
     if not cmd:
