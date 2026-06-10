@@ -227,7 +227,7 @@ const App = {
     if (wfName && Store.workflows[wfName]) {
       Object.keys(Store.workflows[wfName]).forEach(nodeId => {
         const nodeData = Store.workflows[wfName][nodeId] || {};
-        const classType = nodeData['class_type'] || '';
+        const classType = nodeData['_meta']["title"] || '';
         datalist.innerHTML += `<option value="${nodeId}">${classType}</option>`;
       });
     }
