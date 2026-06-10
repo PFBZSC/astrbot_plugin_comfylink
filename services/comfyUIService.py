@@ -61,9 +61,8 @@ class ComfyUIService:
                             error_msg = event_data.get("exception_message")
                             queue.put_nowait({"type": "error", "message": error_msg})
 
-    async def send(self, workflow_data: dict, listen: list = None):
+    async def send(self, workflow_data: dict, listen: list):
         """提交任务，并逐个 yield 产出监听节点的执行结果"""
-        listen = listen or []
         payload = {"prompt": workflow_data, "client_id": self.client_id}
 
         async with aiohttp.ClientSession() as session:
@@ -111,7 +110,7 @@ class ComfyUIService:
             async with session.post(f"{self.http_url}/interrupt") as resp:
                 return resp.status == 200
 
-    async def upload_image(self, image_bytes: bytes, filename: str = None):
+    async def upload_image(self, image_bytes: bytes, filename: str | None = None):
         """上传图片到 ComfyUI 的 input 目录（支持自动识别格式与唯一命名）"""
 
         # 1. 尝试从字节流中识别文件类型（需要事先引入 python-magic，或通过前几个字节判断）

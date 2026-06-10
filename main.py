@@ -32,6 +32,6 @@ class MyPlugin(Star):
     async def draw(self, event: AstrMessageEvent):
         event.stop_event()# 暂不考虑事件传播，先一刀切了吧
         configs = self.storage.get_category("core")
-        result = parser.parse_cmd(event.message_str,configs)
+        parsed_data = parser.parse_cmd(event.message_str,configs)
 
-        await self.draw_service.handle_draw(event,result)
+        await self.draw_service.handle_draw(event,parsed_data)

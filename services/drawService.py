@@ -1,3 +1,5 @@
+from typing import List
+
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.api.event import MessageChain
@@ -5,9 +7,11 @@ from astrbot.api import logger
 from astrbot.core.utils.session_waiter import (session_waiter,SessionController)
 from astrbot.api.star import Context
 
+from ..utils.models import ParsedResult, CommandParsedData, InputItem, OutputItem
 from ..utils import parser
 from ..services.comfyUIService import ComfyUIService
 from ..utils.storage import Storage
+
 
 class DrawService:
     def __init__(self,
@@ -21,36 +25,36 @@ class DrawService:
         self.comfy_service = comfy_service
 
     # ========== 主入口 路由 ==========
-    async def handle_draw(self,event:AstrMessageEvent,result:dict):
-        if not result["success"]:# 指令调用
+    async def handle_draw(self, event:AstrMessageEvent, parsed_result:ParsedResult):
+        if not parsed_result.success:# 指令调用
             await event.send(event.plain_result("输入有误"))
             return
 
-        if result == {'success': True, 'data': {}}:# 无参调用
+        if parsed_result.data is None:# 无参调用
             if event.get_platform_name() == "telegram":
                 # TODO:Telegram
                 pass
             await event.send(event.plain_result("无参调用"))
 
         else:
-            await self._handle_standard(event,result)
+            await self._handle_standard(event, parsed_result.data)
 
     # ========== 指令 / 平台 ==========
-    async def _handle_standard(self,event:AstrMessageEvent,result:dict):
+    async def _handle_standard(self, event:AstrMessageEvent, parsed_data:CommandParsedData):
         # 是否需要上传图片
-        if inputs_images := result["data"]["inputs_images"]:
+        if inputs_images := parsed_data.inputs_images:
             # 更新result
-            result["data"]["inputs_images"] = await self._collect_images(event,inputs_images)
+            parsed_data.inputs_images = await self._collect_images(event, inputs_images)
 
-        config = self.storage.get_file("workflows", result["data"]["workflows"])
-        data = self.parser.parse_comfy_data(result["data"], config)
-        listen_node = [each["id"] for each in result["data"]["outputs"]]
+        config = self.storage.get_file("workflows", parsed_data.workflows)
+        data = self.parser.parse_comfy_data(parsed_data, config)
+        listen_node = [each.id for each in parsed_data.outputs]
         logger.info(f"监听节点：{str(listen_node)}")
-        await self._execute_and_send(event, data, listen_node, result["data"]["outputs"])
+        await self._execute_and_send(event, data, listen_node, parsed_data.outputs)
 
 
     # ========== 底层方法 ==========
-    async def _collect_images(self, event: AstrMessageEvent, inputs_images: list) -> list | None:
+    async def _collect_images(self, event: AstrMessageEvent, inputs_images: List[InputItem]) -> list:
         """图片上传"""
         img_list = []
         await event.send(event.plain_result(f"请上传图片{len(img_list)+1}"))
@@ -83,7 +87,7 @@ class DrawService:
 
         if not img_list or len(img_list) != len(inputs_images):
             # TODO 如果后续要做可选上传图片，需修改
-            return None
+            return []
 
         for i in range(len(img_list)):
             img_url_or_path = img_list[i].strip()
@@ -108,29 +112,32 @@ class DrawService:
                 # 上传 comfyui
                 res = await self.comfy_service.upload_image(img)
                 logger.info(f"成功上传第 {i + 1} 张图片，ComfyUI 服务端文件名: {res['name']}")
-                inputs_images[i]["value"] = res['name']
+                inputs_images[i].value = res['name']
             except Exception as e:
                 logger.error(f"上传图片到 ComfyUI 失败: {str(e)}")
 
         return inputs_images
 
-    async def _execute_and_send(self, event: AstrMessageEvent, workflows: dict, listen_nodes: list,output_config: list):
+    async def _execute_and_send(self, event: AstrMessageEvent, workflows: dict, listen_nodes: list,output_config: List[OutputItem]):
         """最终发送"""
         await event.send(event.plain_result("已将任务提交至ComfyUI"))
         async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
             # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
             # 收到一个，就立刻给用户发一条消息
-            msg_type, result_data, text = parser.parse_result(output_config, partial_result)
-            if msg_type == "images":
-                img = await self.comfy_service.get_image(*result_data)
-                if self.storage.save_file('outputs', result_data[0], img):
-                    if text.strip():
-                        message_chain = MessageChain().message(text)
+            node_res = parser.parse_node_result(output_config, partial_result)
+            if not node_res:
+                continue
+            logger.info(f"解析类型：{node_res.msg_type}")
+            if node_res.msg_type == "images":
+                img = await self.comfy_service.get_image(*node_res.content)
+                if self.storage.save_file('outputs', node_res.content[0], img):
+                    if node_res.text.strip():
+                        message_chain = MessageChain().message(node_res.text)
                         await self.context.send_message(event.unified_msg_origin, message_chain)
-                    message_chain = MessageChain().file_image(str(self.storage.dirs["outputs"] / result_data[0]))
+                    message_chain = MessageChain().file_image(str(self.storage.dirs["outputs"] / node_res.content[0]))
                     await self.context.send_message(event.unified_msg_origin, message_chain)
-            elif msg_type == "text":
-                if text.strip():
-                    result_data = f"{text} {result_data}"
-                message_chain = MessageChain().message(result_data)
+            elif node_res.msg_type == "text":
+                if node_res.text.strip():
+                    content = f"{node_res.text} {node_res.content}"
+                message_chain = MessageChain().message(node_res.content)
                 await self.context.send_message(event.unified_msg_origin, message_chain)
