@@ -5,7 +5,7 @@ from astrbot.api import logger
 from astrbot.core.utils.session_waiter import (session_waiter,SessionController)
 from astrbot.api.star import Context
 
-from ..utils.parser import Parser,parse_result
+from ..utils import parser
 from ..services.comfyUIService import ComfyUIService
 from ..utils.storage import Storage
 
@@ -14,7 +14,6 @@ class DrawService:
     def __init__(self,
             context:Context,
             storage:Storage,
-            parser:Parser,
             comfy_service:ComfyUIService):
 
         self.context = context
@@ -96,14 +95,15 @@ class DrawService:
             # 更新result
             result["data"]["inputs_images"] = inputs_images
 
-        data = self.parser.parse_comfy_data(result["data"])
+        config = self.storage.get_file("workflows", result["data"]["workflows"])
+        data = self.parser.parse_comfy_data(result["data"],config)
         listen = [each["id"] for each in result["data"]["outputs"]]
         logger.info(f"监听节点：{str(listen)}")
         umo = event.unified_msg_origin
         async for partial_result in self.comfy_service.send(data, listen=listen):
             # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
             # 收到一个，就立刻给用户发一条消息
-            msg_type,result_data,text = parse_result(result["data"]["outputs"],partial_result)
+            msg_type,result_data,text = parser.parse_result(result["data"]["outputs"],partial_result)
             if msg_type == "images":
                 img = await self.comfy_service.get_image(*result_data)
                 if self.storage.save_file('outputs',result_data[0],img):

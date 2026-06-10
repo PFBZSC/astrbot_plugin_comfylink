@@ -5,7 +5,7 @@ from astrbot.api import logger,AstrBotConfig
 
 from .services.drawService import DrawService
 from .handlers.web_api import WebApiHandler
-from .utils.parser import Parser,parse_result
+from .utils import parser
 from .utils.storage import Storage
 from .services.comfyUIService import ComfyUIService
 
@@ -16,13 +16,12 @@ class MyPlugin(Star):
         self.config = config
 
         self.storage = Storage(self.name)
-        self.parser = Parser(self.name, self.storage)
 
         self.api_service = WebApiHandler(self.context, self.name,self.storage)
         self.api_service.register()
 
         self.comfy_service = ComfyUIService(self.config.get("url"))
-        self.draw_service = DrawService(context,self.storage,self.parser,self.comfy_service)
+        self.draw_service = DrawService(context,self.storage,self.comfy_service)
 
         asyncio.create_task(self.start_listening())
 
@@ -32,6 +31,7 @@ class MyPlugin(Star):
     @filter.command("draw")
     async def draw(self, event: AstrMessageEvent):
         event.stop_event()# 暂不考虑事件传播，先一刀切了吧
-        result = self.parser.parse_cmd(event.message_str)
+        configs = self.storage.get_category("core")
+        result = parser.parse_cmd(event.message_str,configs)
 
         await self.draw_service.handle_draw(event,result)
