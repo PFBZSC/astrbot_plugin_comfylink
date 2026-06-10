@@ -1,13 +1,13 @@
 from astrbot.api.star import Context
 from quart import request, jsonify
-from ..utils.storage import *
+from ..utils.storage import Storage
 
 
 class WebApiHandler:
-    def __init__(self, context: Context, plugin_name: str):
+    def __init__(self, context: Context, plugin_name: str,storage:Storage):
         self.context = context
         self.name = plugin_name
-        self.st = Storage(self.name)
+        self.st = storage
 
     def register(self):
         # 统一注册Api

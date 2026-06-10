@@ -18,11 +18,14 @@ class MyPlugin(Star):
         super().__init__(context)
         self.config = config
 
-        self.api_service = WebApiHandler(self.context, self.name)
+        self.storage = Storage(self.name)
+
+        self.api_service = WebApiHandler(self.context, self.name,self.storage)
         self.api_service.register()
 
-        self.parser = Parser(self.name)
-        self.st = Storage(self.name)
+
+        self.parser = Parser(self.name,self.storage)
+
         self.comfy_service = ComfyUIService(self.config.get("url"))
 
         asyncio.create_task(self.start_listening())
@@ -85,12 +88,12 @@ class MyPlugin(Star):
                 if img_url_or_path.lower().startswith('http'):
                     try:
                         img_path = await download_image_by_url(img_url_or_path)
-                        img = self.st.get_temp_img(img_path)
+                        img = self.storage.get_temp_img(img_path)
                     except Exception as e:
                         logger.error(f"下载图片发生异常: {str(e)}, URL: {img_url_or_path}")
                 else:
                     try:
-                        img = self.st.get_temp_img(img_url_or_path)
+                        img = self.storage.get_temp_img(img_url_or_path)
                     except Exception as e:
                         logger.error(f"获取本地缓存图片失败: {str(e)}, 路径: {img_url_or_path}")
 
@@ -118,11 +121,11 @@ class MyPlugin(Star):
             msg_type,result_data,text = parse_result(result["data"]["outputs"],partial_result)
             if msg_type == "images":
                 img = await self.comfy_service.get_image(*result_data)
-                if self.st.save_file('outputs',result_data[0],img):
+                if self.storage.save_file('outputs',result_data[0],img):
                     if text.strip():
                         message_chain = MessageChain().message(text)
                         await self.context.send_message(event.unified_msg_origin, message_chain)
-                    message_chain = MessageChain().file_image(str(self.st.dirs["outputs"] / result_data[0]))
+                    message_chain = MessageChain().file_image(str(self.storage.dirs["outputs"] / result_data[0]))
                     await self.context.send_message(event.unified_msg_origin, message_chain)
             elif msg_type == "text":
                 if text.strip():

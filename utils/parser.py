@@ -1,4 +1,4 @@
-from .storage import *
+from .storage import Storage
 # from astrbot.api import logger
 
 
@@ -22,9 +22,9 @@ def parse_result(outputs:list[dict], source:dict):
     return None,None,None
 
 class Parser:
-    def __init__(self,name:str,debug = False):
+    def __init__(self,name:str,storage: Storage):
         self.name = name
-        self.st = Storage(name,debug = debug)
+        self.st = storage
 
     def parse_cmd(self,cmd:str):
         cmd = cmd[4:].strip() # 剥离前缀
@@ -123,7 +123,7 @@ class Parser:
         return config
 
 if __name__ == "__main__":
-    p = Parser("astrbot_plugin_comfylink",debug=True)
+    p = Parser("astrbot_plugin_comfylink",Storage('astrbot_plugin_comfylink',debug=True))
     result = p.parse_cmd("draw zit 提示词")
     inputs_texts = p.parse_comfy_data(result["data"])
     print(inputs_texts)
