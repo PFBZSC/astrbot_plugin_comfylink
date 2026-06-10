@@ -1,8 +1,8 @@
 from .storage import *
-from astrbot.api import logger
+# from astrbot.api import logger
 
 
-def parse_result(outputs:dict, source:dict):
+def parse_result(outputs:list[dict], source:dict):
     source = source[ id := list(source.keys())[0]] # type:{...}
     conf = {} # id type text
     for each in outputs:
@@ -10,15 +10,16 @@ def parse_result(outputs:dict, source:dict):
             conf = each
             break
     if not conf:
-        return None
-    if conf.get("type") == "image":
-        # TODO:逻辑优化
+        return None,None,None
+    if conf.get("type") == "images":
+        # TODO 逻辑优化
         tmp = source["images"][0]
-        return (tmp["filename"], tmp["subfolder"], tmp["type"]),conf.get('text', "")
-    else:
-        # TODO:文本解析
-        return None
-
+        return "images",(tmp["filename"], tmp["subfolder"], tmp["type"]),conf.get('text', "")
+    elif conf.get("type") == "text":
+        # TODO 逻辑优化
+        tmp = source["text"][0]
+        return "text",tmp,conf.get('text', "")
+    return None,None,None
 
 class Parser:
     def __init__(self,name:str,debug = False):
