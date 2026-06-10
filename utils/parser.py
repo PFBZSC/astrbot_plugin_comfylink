@@ -117,6 +117,8 @@ class Parser:
             return {}
         for each in data["inputs_texts"]:
             config[each["id"]]["inputs"][each["key_name"]] = each["value"]
+        for each in data["inputs_images"]:
+            config[each["id"]]["inputs"][each["key_name"]] = each["value"]
         return config
 
 if __name__ == "__main__":
