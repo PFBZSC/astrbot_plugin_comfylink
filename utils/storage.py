@@ -119,5 +119,14 @@ class Storage:
         except Exception:
             return None
 
+    def get_temp_img(self,file_path):
+        '''获取指定img文件'''
+        # TODO 安全校验
+        try:
+            with open(file_path, "rb") as f:
+                return f.read()
+        except Exception:
+            return None
+
 if __name__ == "__main__":
     st = Storage("astrbot_plugin_comfylink",debug=True)
