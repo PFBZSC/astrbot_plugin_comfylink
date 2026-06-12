@@ -7,7 +7,7 @@ from astrbot.api import logger
 from astrbot.core.utils.session_waiter import (session_waiter,SessionController)
 from astrbot.api.star import Context
 
-from ..utils.models import ParsedResult, CommandParsedData, InputItem, OutputItem
+from ..utils.parser import ParsedResult, CommandParsedData, InputItem, OutputItem
 from ..utils import parser
 from ..services.comfyUIService import ComfyUIService
 from ..utils.storage import Storage
