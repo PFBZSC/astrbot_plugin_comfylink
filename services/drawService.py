@@ -17,10 +17,12 @@ class DrawService:
     def __init__(self,
             context:Context,
             storage:Storage,
+            tg_mgr:TelegramManagerService,
             comfy_service:ComfyUIService):
 
         self.context = context
         self.storage = storage
+        self.tg_mgr = tg_mgr
         self.parser = parser
         self.comfy_service = comfy_service
 

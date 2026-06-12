@@ -3,10 +3,11 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger,AstrBotConfig
 
-from .services.drawService import DrawService
-from .handlers.web_api import WebApiHandler
 from .utils import parser
 from .utils.storage import Storage
+from .services.drawService import DrawService
+from .handlers.web_api import WebApiHandler
+from .services.tgManagerService import TelegramManagerService
 from .services.comfyUIService import ComfyUIService
 
 @register("astrbot_plugin_comfylink", "PFBZSC", "AstrBot联动ComfyUI", "1.0.0")
@@ -20,8 +21,9 @@ class MyPlugin(Star):
         self.api_service = WebApiHandler(self.context, self.name,self.storage)
         self.api_service.register()
 
+        self.tg_mgr = TelegramManagerService()
         self.comfy_service = ComfyUIService(self.config.get("url"))
-        self.draw_service = DrawService(context,self.storage,self.comfy_service)
+        self.draw_service = DrawService(context,self.storage,self.tg_mgr,self.comfy_service)
 
         asyncio.create_task(self.start_listening())
 
