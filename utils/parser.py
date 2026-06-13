@@ -34,10 +34,15 @@ class ComfyNodeResult(BaseModel):
 def parse_cmd(cmd: str, config_list) -> ParsedResult:
     parsed_result = ParsedResult(success=False)
 
-    cmd = cmd.split(maxsplit=1)[1].strip()  # 剥离前缀
+    tmp = cmd.split(maxsplit=1)  # 剥离前缀
+    if len(tmp) == 2:
+        cmd = tmp[1]
+    else:
+        cmd = ""
 
     # 1.配置 2.默认参 3.参数1 4.参数2
     if not cmd:
+        parsed_result.success = True
         return parsed_result
 
     tmp = cmd.split(maxsplit=1)
