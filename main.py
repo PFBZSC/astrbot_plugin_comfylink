@@ -2,7 +2,10 @@ import asyncio
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger,AstrBotConfig
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
+from .utils.tg_decorators import tg_callback
 from .utils import parser
 from .utils.storage import Storage
 from .services.drawService import DrawService
@@ -25,6 +28,8 @@ class MyPlugin(Star):
         self.comfy_service = ComfyUIService(self.config.get("url"))
         self.draw_service = DrawService(context,self.storage,self.tg_mgr,self.comfy_service)
 
+        self.tg_mgr.register_routes(self)
+
         asyncio.create_task(self.start_listening())
 
     async def start_listening(self):
@@ -37,3 +42,33 @@ class MyPlugin(Star):
         parsed_data = parser.parse_cmd(event.message_str,configs)
 
         await self.draw_service.handle_draw(event,parsed_data)
+
+    @filter.command("test")
+    @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
+    async def test(self,event:AstrMessageEvent):
+        event.stop_event()
+        platform_id = event.get_platform_id()
+        if not platform_id in self.tg_mgr:
+            self.tg_mgr.add_inst(event,self.context)
+        tg_inst = self.tg_mgr[platform_id]
+
+        keyboard = [
+            [
+                InlineKeyboardButton("选项 A", callback_data="call_test:action_a"),
+                InlineKeyboardButton("选项 B", callback_data="call_test:action_b"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await tg_inst.send(
+            event.get_session_id(),
+            "选择选项：",
+            reply_markup = reply_markup
+        )
+
+    @tg_callback("call_test")
+    async def call_test(self,update:Update,context: ContextTypes.DEFAULT_TYPE,value:str):
+        logger.info("触发call_test")
+        await update.callback_query.edit_message_text(f"你选择了：{value}")
+
+    async def terminate(self):
+        self.tg_mgr.terminate()
