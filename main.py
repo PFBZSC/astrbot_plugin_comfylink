@@ -2,12 +2,13 @@ import asyncio
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger,AstrBotConfig
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from .utils.tg_decorators import tg_callback
 from .utils import parser
 from .utils.storage import Storage
+from .utils.tg_inline_builder import keyboard_build
 from .services.drawService import DrawService
 from .handlers.web_api import WebApiHandler
 from .services.tgManagerService import TelegramManagerService
@@ -52,19 +53,16 @@ class MyPlugin(Star):
             self.tg_mgr.add_inst(event,self.context)
         tg_inst = self.tg_mgr[platform_id]
 
-        keyboard = [
-            [
-                InlineKeyboardButton("选项 A", callback_data="call_test:action_a"),
-                InlineKeyboardButton("选项 B", callback_data="call_test:action_b"),
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        reply_markup = keyboard_build([
+            ("选项A", "choice_A"),
+            ("选项B", "choice_B")
+        ], "call_test",2)
+
         await tg_inst.send(
             event.get_session_id(),
             "选择选项：",
             reply_markup = reply_markup
         )
-
     @tg_callback("call_test")
     async def call_test(self,update:Update,context: ContextTypes.DEFAULT_TYPE,value:str):
         logger.info("触发call_test")
