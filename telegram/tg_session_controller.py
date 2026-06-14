@@ -1,17 +1,20 @@
 import asyncio
-from typing import Dict,Any
+from typing import Dict,Any,Callable
+import inspect
 import secrets
+# from astrbot.api import logger
 
 class TelegramSessionController:
     def __init__(self):
         self.sessions:Dict[str, Dict] = {}
         self._timers: Dict[str, asyncio.Task] = {}
 
-    def create_session(self,timeout:float=60) -> str:
+    def create_session(self,timeout:float=60,callback:Callable|None = None) -> str:
         session_id = secrets.token_urlsafe(7)
         self.sessions[session_id] = {
             "data":{},
-            "timeout":timeout
+            "timeout":timeout,
+            "callback":callback
         }
 
         self._timers[session_id] = asyncio.create_task(
@@ -24,6 +27,13 @@ class TelegramSessionController:
         """对外暴露获取真实数据的接口"""
         session_node = self.sessions.get(session_id)
         return session_node["data"] if session_node else None
+
+    def update_callback(self, session_id: str, new_callback: Callable) -> bool:
+        """允许在运行途中动态更换回调函数"""
+        if session_id not in self.sessions:
+            return False
+        self.sessions[session_id]["callback"] = new_callback
+        return True
 
     async def reset_timer(self, session_id: str, timeout: float = -1) -> bool:
         """
@@ -52,11 +62,21 @@ class TelegramSessionController:
         try:
             await asyncio.sleep(timeout)
             # 时间到，执行剔除逻辑
-            self.sessions.pop(session_id, None)
+            session = self.sessions.pop(session_id, None)
             self._timers.pop(session_id, None)
+
+            if session:
+                callback:Callable|None = session.get("callback")
+                if callback:
+                    if inspect.iscoroutinefunction(callback):
+                        await callback(session_id,session.get("data"))
+                    else:
+                        callback(session_id,session.get("data"))
+
         except asyncio.CancelledError:
             # 任务被取消（说明被重置或手动销毁），不做任何处理
             pass
+
 
     async def _cancel_timer(self, session_id: str) -> None:
         timer_task = self._timers.pop(session_id, None)
