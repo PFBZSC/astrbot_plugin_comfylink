@@ -158,3 +158,9 @@ def parse_node_result(outputs: List[OutputItem], source: dict) -> Optional[Comfy
         tmp = source["text"][0]
         return ComfyNodeResult(msg_type="text",content=tmp,text = node.text)
     return None
+
+def smart_format(text:str,ftext:str) -> str:
+    if ftext in text:
+        return text.format(ftext)
+    else:
+        return f"{text}{ftext}"

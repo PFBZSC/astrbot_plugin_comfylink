@@ -1,4 +1,5 @@
 from typing import List
+from functools import partial
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.utils.io import download_image_by_url
@@ -7,10 +8,17 @@ from astrbot.api import logger
 from astrbot.core.utils.session_waiter import (session_waiter,SessionController)
 from astrbot.api.star import Context
 
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from ..telegram.tg_session_controller import TelegramSessionController
 from ..utils.parser import ParsedResult, CommandParsedData, InputItem, OutputItem
 from ..utils import parser
+from ..utils.tg_inline_builder import keyboard_build
+from ..services.tgManagerService import TelegramManagerService, TelegramInstance
 from ..services.comfyUIService import ComfyUIService
 from ..utils.storage import Storage
+from ..utils.tg_decorators import tg_callback
 
 
 class DrawService:
@@ -18,13 +26,17 @@ class DrawService:
             context:Context,
             storage:Storage,
             tg_mgr:TelegramManagerService,
+            tg_sc:TelegramSessionController,
             comfy_service:ComfyUIService):
 
         self.context = context
         self.storage = storage
         self.tg_mgr = tg_mgr
+        self.tg_sc = tg_sc
         self.parser = parser
         self.comfy_service = comfy_service
+
+        self.tg_mgr.register_routes(self)
 
     # ========== 主入口 路由 ==========
     async def handle_draw(self, event:AstrMessageEvent, parsed_result:ParsedResult):
@@ -35,8 +47,9 @@ class DrawService:
         if parsed_result.data is None:# 无参调用
             if event.get_platform_name() == "telegram":
                 # TODO:Telegram
-                pass
-            await event.send(event.plain_result("无参调用"))
+                await self._handle_telegram(event)
+            else:
+                await event.send(event.plain_result("当前仅支持telegram平台"))
 
         else:
             await self._handle_standard(event, parsed_result.data)
@@ -53,6 +66,155 @@ class DrawService:
         listen_node = [each.id for each in parsed_data.outputs]
         logger.info(f"监听节点：{str(listen_node)}")
         await self._execute_and_send(event, data, listen_node, parsed_data.outputs)
+
+    async def _handle_telegram(self, event: AstrMessageEvent):
+        # 获取实例
+        platform_id = event.get_platform_id()
+        if not platform_id in self.tg_mgr:
+            self.tg_mgr.add_inst(event,self.context)
+        tg_inst = self.tg_mgr[platform_id]
+
+        # command:user_input:session_id
+        tg_config_list = self.storage.get_category("telegram")
+        if not tg_config_list:
+            await tg_inst.send(event.get_session_id(), "后台未配置工作流")
+            return
+
+        # 创建tg_session
+        session_id = self.tg_sc.create_session(timeout=60)
+
+        # get_tg_config:name:session_id
+        choices = [(each['name'],f"get_tg_config:{each['name']}:{session_id}") for each in tg_config_list]
+        reply_markup = keyboard_build(choices,"tg_draw",3)
+
+        msg_id = await tg_inst.send(event.get_session_id(),"选择工作流：",reply_markup=reply_markup)
+        bound_callback = partial(self.tg_terminate,tg_inst=tg_inst,chat_id=event.get_session_id(),message_id=msg_id)
+        self.tg_sc.update_callback(session_id, bound_callback)
+
+
+    @tg_callback("tg_draw")
+    async def tg_draw(self,update:Update,_context: ContextTypes.DEFAULT_TYPE,value:str):
+        # 输入拆解
+        logger.info(f"tg_draw收到字符串:{value}")
+        command,user_input,session_id = value.split(":")
+        data = self.tg_sc.get_data(session_id)
+        if data is None:
+            # 超时
+            logger.error(f"获取不到session_id:{session_id},可能已经超时或未被注册")
+            await update.effective_sender.send_message("选择无效")
+            return
+        # 重置计时器
+        await self.tg_sc.reset_timer(session_id)
+
+
+        if command == "get_tg_config":
+            # TODO 后续抽离专门负责解析telegram配置
+            # tg_config_name,tg_config,core,workflows
+            data["tg_config_name"] = user_input
+            tg_config_list = self.storage.get_category("telegram")
+
+            config = {}
+            for each in tg_config_list:
+                if each.get("name") == user_input:
+                    config = each
+            data["tg_config"] = config
+            if not config:
+                await self.tg_sc.close_session(session_id)
+                await update.callback_query.edit_message_text("获取配置时出现错误：未找到tg_config")
+                return
+            # 通过core_id获取core配置
+            if (core_id := config.get("core_id")) is None:
+                await self.tg_sc.close_session(session_id)
+                await update.callback_query.edit_message_text("获取配置时出现错误：未找到tg_config中core_id")
+                return
+
+            data["core"] = self.storage.get_file("core",f"{core_id}.json")
+
+            if (workflows := data["core"].get("workflows")) is None:
+                await self.tg_sc.close_session(session_id)
+                await update.callback_query.edit_message_text("获取配置时出现错误：未找到config中workflows")
+                return
+            data["workflows"] = self.storage.get_file("workflows",workflows)
+            command = "send_setting"
+
+        if command == "get_setting":
+            var_name,var_value = value.split("=")
+            if var_name and var_value:
+                if data.get("var_list") is None:
+                    data["var_list"] = []
+                data["var_list"].append((var_name,var_value))
+            command = "send_setting"
+
+        if command == "send_setting":
+            # 读取问询配置
+            if data["tg_config"]["dialog"]:
+                dialog = data["tg_config"]["dialog"].pop(0)
+                text = dialog["text"]
+                # TODO can_input需要注册多轮对话
+                # can_input = first_dialog["can_input"]
+                # get_tg_config:varname=value:session_id
+                choices = [(each["name"], f"get_setting:{each["var_name"]}={each["value"]}:{session_id}") for each in
+                           dialog["option"]]
+                reply_markup = keyboard_build(choices, "tg_draw", 3)
+                await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+                return
+            else:
+                command = "send_prompt_1"
+
+        if command[:-2] == "get_prompt":
+            stage = command.split("_")[-1]
+            if stage == "1":
+                data["input_prompt"] = data["system_prompt"].get("framework")[int(user_input)]["text"]
+                command = f"send_prompt_{int(stage) + 1}"
+            elif stage == "2":
+                data["input_prompt"] = parser.smart_format(data["input_prompt"],data["system_prompt"].get("description")[int(user_input)]["text"])
+                command = f"send_prompt_{int(stage) + 1}"
+            elif data["system_prompt"]["trigger"]:
+                trigger = data["system_prompt"]["trigger"].pop(int(user_input))
+                data["input_prompt"] = parser.smart_format(data["input_prompt"],trigger["text"])
+            else:
+                command = "parse"
+
+        if command[:-2] == "send_prompt":
+            logger.info("aaa")
+            stage = command.split("_")[-1]
+            if data.get("system_prompt") is None:
+                data["system_prompt"] = self.storage.get_file("prompt", "system.json")
+            logger.info("bbb")
+            text = ""
+            if stage == "1" and (stage_prompt := data["system_prompt"].get("framework")):
+                text = "选择提示词框架："
+            elif stage == "2" and (stage_prompt := data["system_prompt"].get("description")):
+                text = "选择提示词描述："
+            elif stage_prompt := data["system_prompt"].get("trigger"):
+                text = "选择提示词触发词："
+            if text:
+                # get_prompt_X:index:session_id
+                choices = [(stage_prompt[i]["name"], f"get_prompt_{stage}:{i}:{session_id}") for i in
+                           range(len(stage_prompt))]
+                logger.info("ccc")
+                choices.append(("跳过", f"parse::{session_id}"))
+                reply_markup = keyboard_build(choices, "tg_draw", 3)
+                await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+            else:
+                command = "parse"
+
+        if command == "parse":
+            # workflows,setting,aio,prompt
+            # setting+aio+prompt -> workflows
+            core = data.get("core")
+            workflows = data.get("workflows")
+            var_list = data.get("var_list")
+            prompt = data.get("input_prompt")
+            await update.effective_sender.send_message("成功获取完毕")
+
+
+
+
+
+    @staticmethod
+    async def tg_terminate(_session_id, _data, tg_inst:TelegramInstance, chat_id, message_id):
+        await tg_inst.edit(chat_id, message_id, "会话超时")
 
 
     # ========== 底层方法 ==========

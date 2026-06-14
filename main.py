@@ -5,6 +5,7 @@ from astrbot.api import logger,AstrBotConfig
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from .telegram.tg_session_controller import TelegramSessionController
 from .utils.tg_decorators import tg_callback
 from .utils import parser
 from .utils.storage import Storage
@@ -26,8 +27,9 @@ class MyPlugin(Star):
         self.api_service.register()
 
         self.tg_mgr = TelegramManagerService()
+        self.tg_sc = TelegramSessionController()
         self.comfy_service = ComfyUIService(self.config.get("url"))
-        self.draw_service = DrawService(context,self.storage,self.tg_mgr,self.comfy_service)
+        self.draw_service = DrawService(context,self.storage,self.tg_mgr,self.tg_sc,self.comfy_service)
 
         self.tg_mgr.register_routes(self)
 
