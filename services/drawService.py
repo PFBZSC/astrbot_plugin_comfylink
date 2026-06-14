@@ -307,3 +307,26 @@ class DrawService:
                     content = node_res.content
                 message_chain = MessageChain().message(content)
                 await self.context.send_message(event.unified_msg_origin, message_chain)
+
+    async def _execute_and_send_tg(self, update:Update, workflows: dict, listen_nodes: list,output_config: List[OutputItem]):
+        """最终发送"""
+        await update.callback_query.edit_message_text("已将任务提交至ComfyUI")
+        async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
+            # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
+            # 收到一个，就立刻给用户发一条消息
+            node_res = parser.parse_node_result(output_config, partial_result)
+            if not node_res:
+                continue
+            logger.info(f"解析类型：{node_res.msg_type}")
+            if node_res.msg_type == "images":
+                img = await self.comfy_service.get_image(*node_res.content)
+                if self.storage.save_file('outputs', node_res.content[0], img):
+                    if node_res.text.strip():
+                        await update.effective_sender.send_message(node_res.text)
+                    await update.effective_sender.send_photo(str(self.storage.dirs["outputs"] / node_res.content[0]))
+            elif node_res.msg_type == "text":
+                if node_res.text.strip():
+                    content = f"{node_res.text} {node_res.content}"
+                else:
+                    content = node_res.content
+                await update.effective_sender.send_message(content)
