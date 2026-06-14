@@ -303,5 +303,7 @@ class DrawService:
             elif node_res.msg_type == "text":
                 if node_res.text.strip():
                     content = f"{node_res.text} {node_res.content}"
-                message_chain = MessageChain().message(node_res.content)
+                else:
+                    content = node_res.content
+                message_chain = MessageChain().message(content)
                 await self.context.send_message(event.unified_msg_origin, message_chain)
