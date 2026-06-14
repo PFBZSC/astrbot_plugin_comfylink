@@ -106,7 +106,7 @@ def parse_data(config_name: str, default: str, args: list, config_list: list) ->
         )
 
     for each in config_json["inputs_images"]:
-        parsed_data.inputs_texts.append(
+        parsed_data.inputs_images.append(
             InputItem(id=each["id"], key_name=each["key_name"], value="")
         )
 
@@ -160,7 +160,7 @@ def parse_node_result(outputs: List[OutputItem], source: dict) -> Optional[Comfy
     return None
 
 def smart_format(text:str,ftext:str) -> str:
-    if ftext in text:
+    if "{}" in text:
         return text.format(ftext)
     else:
         return f"{text}{ftext}"
