@@ -57,6 +57,35 @@ class TelegramSessionController:
         )
         return True
 
+    async def close_session(self, session_id: str, trigger_callback: bool = False) -> bool:
+        """
+        显式关闭/结束指定会话
+        :param session_id: 会话 id
+        :param trigger_callback: 是否在关闭时触发回调，默认False
+        :return: 关闭成功返回 True，若 session 不存在返回 False
+        """
+        if session_id not in self.sessions:
+            return False
+
+        # 1. 立即取消并清理计时器，防止触发 _timer_countdown 中的默认剔除逻辑
+        await self._cancel_timer(session_id)
+
+        # 2. 弹出并获取会话数据
+        session = self.sessions.pop(session_id, None)
+        if not session:
+            return False
+
+        # 3. 根据参数决定是否执行回调
+        if trigger_callback:
+            callback:Callable|None = session.get("callback")
+            if callback:
+                if inspect.iscoroutinefunction(callback):
+                    await callback(session_id, session.get("data"))
+                else:
+                    callback(session_id, session.get("data"))
+
+        return True
+
     async def _timer_countdown(self, session_id: str, timeout: float) -> None:
         """内部异步计时逻辑"""
         try:
