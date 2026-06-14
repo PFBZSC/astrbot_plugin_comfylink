@@ -132,8 +132,13 @@ class TelegramInstance:
         logger.warn("[TelegramInstance] 成功卸载CallbackQueryHandler")
 
 
-    async def send(self,chat_id,text:str,reply_markup:InlineKeyboardMarkup|None=None) -> None:
-        await self.client.send_message(chat_id=chat_id,text = text,reply_markup=reply_markup)
+    async def send(self,chat_id,text:str,reply_markup:InlineKeyboardMarkup|None=None) -> int|bool:
+        sent_message = await self.client.send_message(chat_id=chat_id,text = text,reply_markup=reply_markup)
+        return sent_message.message_id
+
+    async def edit(self,chat_id,message_id,text:str,reply_markup:InlineKeyboardMarkup|None=None) -> int|bool:
+        sent_message = await self.client.edit_message_text(chat_id=chat_id,message_id=message_id,text=text,reply_markup=reply_markup)
+        return getattr(sent_message,"message_id",False)
 
 
     async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
