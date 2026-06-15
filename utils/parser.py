@@ -1,12 +1,12 @@
 from typing import Optional, List
-
+from astrbot.api import logger
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 class InputItem(BaseModel):
     id: str
     key_name: str
-    value: str = ""
+    value: str|bool = ""
 
 class OutputItem(BaseModel):
     id: str
@@ -33,7 +33,6 @@ class ComfyNodeResult(BaseModel):
 
 def parse_cmd(cmd: str, config_list) -> ParsedResult:
     parsed_result = ParsedResult(success=False)
-
     tmp = cmd.split(maxsplit=1)  # 剥离前缀
     if len(tmp) == 2:
         cmd = tmp[1]
@@ -44,7 +43,6 @@ def parse_cmd(cmd: str, config_list) -> ParsedResult:
     if not cmd:
         parsed_result.success = True
         return parsed_result
-
     tmp = cmd.split(maxsplit=1)
     _config_name = tmp[0]  # 1.配置
     if len(tmp) != 2:
@@ -52,7 +50,6 @@ def parse_cmd(cmd: str, config_list) -> ParsedResult:
         parsed_result.data = CommandParsedData(config_name=_config_name)
         return parsed_result
     cmd = tmp[1]
-
     # 解析2.默认参
     _default = ''
     if (i := cmd.find("--")) == -1:
@@ -89,7 +86,6 @@ def parse_data(config_name: str, default: str, args: list, config_list: list) ->
     if not config_json:
         #没找到配置
         return None
-
     if (default_key := config_json.get("default", "")) and default:
         args.append([default_key, default])
 
@@ -97,9 +93,8 @@ def parse_data(config_name: str, default: str, args: list, config_list: list) ->
     for each in args:
         key, value = each if len(each) == 2 else (each[0], True)
         arg_dict[key] = value
-
     for each in config_json["inputs_texts"]:
-        value = arg_dict.get(each["var_name"], "")
+        value = arg_dict.get(each["var_name"])
         if value is None: value = ""
         parsed_data.inputs_texts.append(
             InputItem(id=each["id"], key_name=each["key_name"], value=value)
@@ -127,17 +122,6 @@ def parse_comfy_data(data: CommandParsedData, workflows: dict) -> dict:
     for each in data.inputs_images:
         workflows[each.id]["inputs"][each.key_name] = each.value
     return workflows
-
-
-if __name__ == "__main__":
-    from storage import Storage
-
-    storage = Storage('astrbot_plugin_comfylink', debug=True)
-    configs = storage.get_category("core")
-    result = parse_cmd("draw zit 提示词", configs)
-    # inputs_texts = parse_comfy_data(result["data"])
-    # print(inputs_texts)
-
 
 def parse_node_result(outputs: List[OutputItem], source: dict) -> Optional[ComfyNodeResult]:
     source = source[id := list(source.keys())[0]]  # type:{...}
