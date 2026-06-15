@@ -1,5 +1,6 @@
 from typing import List
 from functools import partial
+import asyncio
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.utils.io import download_image_by_url
@@ -82,7 +83,7 @@ class DrawService:
 
         # 创建tg_session
         session_id = self.tg_sc.create_session(timeout=60)
-
+        self.tg_sc.get_data(session_id)["event"] = event
         # get_tg_config:name:session_id
         choices = [(each['name'],f"get_tg_config:{each['name']}:{session_id}") for each in tg_config_list]
         reply_markup = keyboard_build(choices,"tg_draw",3)
@@ -138,11 +139,11 @@ class DrawService:
             command = "send_setting"
 
         if command == "get_setting":
-            var_name,var_value = value.split("=")
+            var_name,var_value = user_input.split("=")
             if var_name and var_value:
                 if data.get("var_list") is None:
                     data["var_list"] = []
-                data["var_list"].append((var_name,var_value))
+                data["var_list"].append([var_name,var_value])
             command = "send_setting"
 
         if command == "send_setting":
@@ -172,15 +173,14 @@ class DrawService:
             elif data["system_prompt"]["trigger"]:
                 trigger = data["system_prompt"]["trigger"].pop(int(user_input))
                 data["input_prompt"] = parser.smart_format(data["input_prompt"],trigger["text"])
+                command = f"send_prompt_{int(stage) + 1}"
             else:
                 command = "parse"
 
         if command[:-2] == "send_prompt":
-            logger.info("aaa")
             stage = command.split("_")[-1]
             if data.get("system_prompt") is None:
                 data["system_prompt"] = self.storage.get_file("prompt", "system.json")
-            logger.info("bbb")
             text = ""
             if stage == "1" and (stage_prompt := data["system_prompt"].get("framework")):
                 text = "选择提示词框架："
@@ -192,7 +192,6 @@ class DrawService:
                 # get_prompt_X:index:session_id
                 choices = [(stage_prompt[i]["name"], f"get_prompt_{stage}:{i}:{session_id}") for i in
                            range(len(stage_prompt))]
-                logger.info("ccc")
                 choices.append(("跳过", f"parse::{session_id}"))
                 reply_markup = keyboard_build(choices, "tg_draw", 3)
                 await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
@@ -200,16 +199,44 @@ class DrawService:
                 command = "parse"
 
         if command == "parse":
-            # workflows,setting,aio,prompt
-            # setting+aio+prompt -> workflows
             core = data.get("core")
             workflows = data.get("workflows")
             var_list = data.get("var_list")
             prompt = data.get("input_prompt")
-            await update.effective_sender.send_message("成功获取完毕")
+            parsed_data = parser.parse_data(core["commands"],prompt,var_list,[core])
+            if parsed_data:
+                listen_node = [each.id for each in parsed_data.outputs]
 
+                # 是否需要上传图片
+                if inputs_images := parsed_data.inputs_images:
+                    await update.callback_query.edit_message_text("参数记录完毕")
+                    event = data["event"]
+                    await self.tg_sc.close_session(session_id)
 
+                    # 放入后台任务防阻塞
+                    async def process_and_send():
+                        # 1. 先收集图片，这会更新 inputs_images 里对象的值为 ComfyUI 返回的文件名
+                        final_images = await self._collect_images(event, inputs_images)
+                        if not final_images:
+                            return
+                        parsed_data.inputs_images = final_images
 
+                        # 2. 【核心修复】必须在图片收集并赋值完成后，再将数据装配进工作流
+                        final_workflows = parser.parse_comfy_data(parsed_data, workflows)
+
+                        logger.info(f"监听节点：{str(listen_node)}")
+                        logger.info(core)
+                        logger.info(parsed_data)
+                        await self._execute_and_send_tg(update, final_workflows, listen_node, parsed_data.outputs)
+
+                    asyncio.create_task(process_and_send())
+                else:
+                    # 如果不需要发图，直接装配并执行
+                    final_workflows = parser.parse_comfy_data(parsed_data, workflows)
+                    logger.info(f"监听节点：{str(listen_node)}")
+                    await self._execute_and_send_tg(update, final_workflows, listen_node, parsed_data.outputs)
+            else:
+                await update.callback_query.edit_message_text("解析时出现错误")
 
 
     @staticmethod
@@ -246,6 +273,7 @@ class DrawService:
             await upload_waiter(event)
         except TimeoutError as _:  # 当超时后，会话控制器会抛出 TimeoutError
             await event.send(event.plain_result("超时结束"))
+            event.stop_event()
         except Exception as e:
             await event.send(event.plain_result("发生错误，请联系管理员: " + str(e)))
 
@@ -310,7 +338,6 @@ class DrawService:
 
     async def _execute_and_send_tg(self, update:Update, workflows: dict, listen_nodes: list,output_config: List[OutputItem]):
         """最终发送"""
-        await update.callback_query.edit_message_text("已将任务提交至ComfyUI")
         async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
             # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
             # 收到一个，就立刻给用户发一条消息
