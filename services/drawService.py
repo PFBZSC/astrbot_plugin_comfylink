@@ -158,28 +158,34 @@ class DrawService:
             return
         await self.comfy_service.start_listening()
         await event.send(event.plain_result("已将任务提交至ComfyUI"))
-        async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
-            # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
-            # 收到一个，就立刻给用户发一条消息
-            node_res = parser.parse_node_result(output_config, partial_result)
-            if not node_res:
-                continue
-            logger.info(f"解析类型：{node_res.msg_type}")
-            if node_res.msg_type == "images":
-                img = await self.comfy_service.get_image(*node_res.content)
-                if self.storage.save_file('outputs', node_res.content[0], img):
-                    if node_res.text.strip():
-                        message_chain = MessageChain().message(node_res.text)
+        try:
+            async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
+                try:
+                    node_res = parser.parse_node_result(output_config, partial_result)
+                    if not node_res:
+                        continue
+                    logger.info(f"解析类型：{node_res.msg_type}")
+                    if node_res.msg_type == "images":
+                        img = await self.comfy_service.get_image(*node_res.content)
+                        if self.storage.save_file('outputs', node_res.content[0], img):
+                            if node_res.text.strip():
+                                message_chain = MessageChain().message(node_res.text)
+                                await self.context.send_message(event.unified_msg_origin, message_chain)
+                            message_chain = MessageChain().file_image(str(self.storage.dirs["outputs"] / node_res.content[0]))
+                            await self.context.send_message(event.unified_msg_origin, message_chain)
+                    elif node_res.msg_type == "text":
+                        if node_res.text.strip():
+                            content = f"{node_res.text} {node_res.content}"
+                        else:
+                            content = node_res.content
+                        message_chain = MessageChain().message(content)
                         await self.context.send_message(event.unified_msg_origin, message_chain)
-                    message_chain = MessageChain().file_image(str(self.storage.dirs["outputs"] / node_res.content[0]))
-                    await self.context.send_message(event.unified_msg_origin, message_chain)
-            elif node_res.msg_type == "text":
-                if node_res.text.strip():
-                    content = f"{node_res.text} {node_res.content}"
-                else:
-                    content = node_res.content
-                message_chain = MessageChain().message(content)
-                await self.context.send_message(event.unified_msg_origin, message_chain)
+                except Exception as e:
+                    logger.error(f"处理节点结果时出错: {e}", exc_info=True)
+                    # 单节点失败不阻止后续节点
+                    continue
+        except Exception as e:
+            await event.send(event.plain_result(f"ComfyUI 执行出错: {str(e)}"))
 
     async def _execute_and_send_tg(self, update:Update, workflows: dict, listen_nodes: list,output_config: List[OutputItem]):
         """最终发送"""
@@ -187,22 +193,27 @@ class DrawService:
             await update.effective_sender.send_message("ComfyUI 未启动，请先启动 ComfyUI 再重试")
             return
         await self.comfy_service.start_listening()
-        async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
-            # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
-            # 收到一个，就立刻给用户发一条消息
-            node_res = parser.parse_node_result(output_config, partial_result)
-            if not node_res:
-                continue
-            logger.info(f"解析类型：{node_res.msg_type}")
-            if node_res.msg_type == "images":
-                img = await self.comfy_service.get_image(*node_res.content)
-                if self.storage.save_file('outputs', node_res.content[0], img):
-                    if node_res.text.strip():
-                        await update.effective_sender.send_message(node_res.text)
-                    await update.effective_sender.send_photo(str(self.storage.dirs["outputs"] / node_res.content[0]))
-            elif node_res.msg_type == "text":
-                if node_res.text.strip():
-                    content = f"{node_res.text} {node_res.content}"
-                else:
-                    content = node_res.content
-                await update.effective_sender.send_message(content)
+        try:
+            async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
+                try:
+                    node_res = parser.parse_node_result(output_config, partial_result)
+                    if not node_res:
+                        continue
+                    logger.info(f"解析类型：{node_res.msg_type}")
+                    if node_res.msg_type == "images":
+                        img = await self.comfy_service.get_image(*node_res.content)
+                        if self.storage.save_file('outputs', node_res.content[0], img):
+                            if node_res.text.strip():
+                                await update.effective_sender.send_message(node_res.text)
+                            await update.effective_sender.send_photo(str(self.storage.dirs["outputs"] / node_res.content[0]))
+                    elif node_res.msg_type == "text":
+                        if node_res.text.strip():
+                            content = f"{node_res.text} {node_res.content}"
+                        else:
+                            content = node_res.content
+                        await update.effective_sender.send_message(content)
+                except Exception as e:
+                    logger.error(f"处理节点结果时出错: {e}", exc_info=True)
+                    continue
+        except Exception as e:
+            await update.effective_sender.send_message(f"ComfyUI 执行出错: {str(e)}")
