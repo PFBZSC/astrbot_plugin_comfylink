@@ -3,6 +3,8 @@ import aiohttp
 import json
 import uuid
 
+from astrbot.api import logger
+
 
 class ComfyUIService:
     def __init__(self, server_address="127.0.0.1:8188"):
@@ -31,42 +33,79 @@ class ComfyUIService:
             self._ws_task = asyncio.create_task(self._listen_ws())
 
     async def _listen_ws(self):
-        """后台持续接收 ComfyUI 的广播，并精准唤醒对应的挂起任务"""
-        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
-            async with session.ws_connect(f"{self.ws_url}?clientId={self.client_id}") as ws:
-                async for msg in ws:
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        data = json.loads(msg.data)
-                        event_type = data.get("type")
-                        event_data = data.get("data", {})
-                        prompt_id = event_data.get("prompt_id")
+        """后台持续接收 ComfyUI 的广播，支持断线重连与指数退避"""
+        backoff = 1  # 初始重试间隔（秒）
+        max_backoff = 60
 
-                        if prompt_id not in self.active_tasks:
-                            continue
+        while not self._stop_event.is_set():
+            try:
+                async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
+                    async with session.ws_connect(
+                        f"{self.ws_url}?clientId={self.client_id}"
+                    ) as ws:
+                        # 连接成功，重置退避
+                        backoff = 1
+                        self._ws_connected = True
+                        logger.info("[ComfyUI] WebSocket 连接成功")
 
-                        task_ctx = self.active_tasks[prompt_id]
-                        queue = task_ctx["queue"]
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                data = json.loads(msg.data)
+                                event_type = data.get("type")
+                                event_data = data.get("data", {})
+                                prompt_id = event_data.get("prompt_id")
 
-                        # 1. 某个节点完成，立刻放入队列
-                        if event_type == "executed":
-                            node_id = event_data.get("node")
-                            output = event_data.get("output")
-                            listen_nodes = task_ctx["listen"]
+                                if prompt_id not in self.active_tasks:
+                                    continue
 
-                            # 如果节点在目标列表内（或未指定列表），立刻塞入队列
-                            if not listen_nodes or node_id in listen_nodes:
-                                # 使用 put_nowait 防止阻塞 WS 监听器
-                                queue.put_nowait({"type": "node_result", "node": node_id, "output": output})
+                                task_ctx = self.active_tasks[prompt_id]
+                                queue = task_ctx["queue"]
 
-                        # 2. 整个工作流执行结束
-                        elif event_type == "executing":
-                            if event_data.get("node") is None:
-                                queue.put_nowait({"type": "done"})
+                                if event_type == "executed":
+                                    node_id = event_data.get("node")
+                                    output = event_data.get("output")
+                                    listen_nodes = task_ctx["listen"]
+                                    if not listen_nodes or node_id in listen_nodes:
+                                        queue.put_nowait({
+                                            "type": "node_result",
+                                            "node": node_id,
+                                            "output": output,
+                                        })
 
-                        # 3. 异常处理
-                        elif event_type == "execution_error":
-                            error_msg = event_data.get("exception_message")
-                            queue.put_nowait({"type": "error", "message": error_msg})
+                                elif event_type == "executing":
+                                    if event_data.get("node") is None:
+                                        queue.put_nowait({"type": "done"})
+
+                                elif event_type == "execution_error":
+                                    queue.put_nowait({
+                                        "type": "error",
+                                        "message": event_data.get("exception_message"),
+                                    })
+
+            except asyncio.CancelledError:
+                logger.info("[ComfyUI] WebSocket 监听任务被取消")
+                break
+            except Exception as e:
+                self._ws_connected = False
+                logger.warning(
+                    f"[ComfyUI] WebSocket 连接断开: {e}，{backoff}s 后重试..."
+                )
+
+            # 退避等待（可被 stop_event 或 reconnect_now 打断）
+            if not self._stop_event.is_set():
+                try:
+                    await asyncio.wait_for(
+                        self._stop_event.wait(), timeout=backoff
+                    )
+                    # stop_event 被 set，退出循环
+                    break
+                except asyncio.TimeoutError:
+                    pass  # 正常超时，继续重连
+
+                backoff = min(backoff * 2, max_backoff)
+
+        self._ws_connected = False
+        logger.info("[ComfyUI] WebSocket 监听已退出")
 
     async def send(self, workflow_data: dict, listen: list):
         """提交任务，并逐个 yield 产出监听节点的执行结果"""
