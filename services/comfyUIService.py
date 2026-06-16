@@ -13,10 +13,17 @@ class ComfyUIService:
         # 生成唯一客户端ID，防止与 ComfyUI 上其他任务的 WS 消息冲突
         self.client_id = str(uuid.uuid4())
 
-        # 任务分拣字典：{ prompt_id: asyncio.Future }
+        # 任务分拣字典：{ prompt_id: {queue, listen} }
         self.active_tasks = {}
         # 存储 WS 监听后台任务的句柄
         self._ws_task = None
+
+        # 所有 HTTP/WS 调用的统一超时（30 秒）
+        self._http_timeout = aiohttp.ClientTimeout(total=30)
+        # 干净关闭信号：set 后重连循环退出
+        self._stop_event = asyncio.Event()
+        # 可观测的 WS 连接状态
+        self._ws_connected = False
 
     async def start_listening(self):
         """启动全局的 WebSocket 监听（在发送任何任务前调用即可）"""
