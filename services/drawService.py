@@ -153,6 +153,10 @@ class DrawService:
 
     async def _execute_and_send(self, event: AstrMessageEvent, workflows: dict, listen_nodes: list,output_config: List[OutputItem]):
         """最终发送"""
+        if not await self.comfy_service.health_check():
+            await event.send(event.plain_result("ComfyUI 未启动，请先启动 ComfyUI 再重试"))
+            return
+        await self.comfy_service.start_listening()
         await event.send(event.plain_result("已将任务提交至ComfyUI"))
         async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
             # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
@@ -179,6 +183,10 @@ class DrawService:
 
     async def _execute_and_send_tg(self, update:Update, workflows: dict, listen_nodes: list,output_config: List[OutputItem]):
         """最终发送"""
+        if not await self.comfy_service.health_check():
+            await update.effective_sender.send_message("ComfyUI 未启动，请先启动 ComfyUI 再重试")
+            return
+        await self.comfy_service.start_listening()
         async for partial_result in self.comfy_service.send(workflows, listen=listen_nodes):
             # 这里的 partial_result 就是单个节点的产物，例如: {"9": {"images": [...]}}
             # 收到一个，就立刻给用户发一条消息
