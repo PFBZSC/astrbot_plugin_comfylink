@@ -11,15 +11,19 @@ class TelegramSessionController:
 
     def create_session(self,timeout:float=60,callback:Callable|None = None) -> str:
         session_id = secrets.token_urlsafe(7)
+
+        # 先创建 timer，成功后再存储 session — 避免 task 创建失败导致
+        # 永久泄漏（session 无超时守卫）
+        timer_task = asyncio.create_task(
+            self._timer_countdown(session_id, timeout)
+        )
+        self._timers[session_id] = timer_task
         self.sessions[session_id] = {
             "data":{},
             "timeout":timeout,
-            "callback":callback
+            "callback":callback,
+            "_callback_fired": False,
         }
-
-        self._timers[session_id] = asyncio.create_task(
-            self._timer_countdown(session_id, timeout)
-        )
 
         return session_id
 
@@ -45,16 +49,23 @@ class TelegramSessionController:
         if session_id not in self.sessions:
             return False
 
-        # 取消当前的计时任务
-        await self._cancel_timer(session_id)
-
         # 确定新的超时时长
         actual_timeout = self.sessions[session_id]["timeout"] if timeout == -1 else timeout
 
-        # 重新启动计时任务
-        self._timers[session_id] = asyncio.create_task(
+        # 先创建新 timer，再取消旧的 — 避免创建失败导致 session 无超时守卫
+        new_task = asyncio.create_task(
             self._timer_countdown(session_id, actual_timeout)
         )
+
+        old_task = self._timers.get(session_id)
+        if old_task and not old_task.done():
+            old_task.cancel()
+            try:
+                await old_task
+            except asyncio.CancelledError:
+                pass
+
+        self._timers[session_id] = new_task
         return True
 
     async def close_session(self, session_id: str, trigger_callback: bool = False) -> bool:
@@ -75,8 +86,9 @@ class TelegramSessionController:
         if not session:
             return False
 
-        # 3. 根据参数决定是否执行回调
-        if trigger_callback:
+        # 3. 根据参数决定是否执行回调（带 _callback_fired 防护）
+        if trigger_callback and not session.get("_callback_fired"):
+            session["_callback_fired"] = True
             callback:Callable|None = session.get("callback")
             if callback:
                 if inspect.iscoroutinefunction(callback):
@@ -94,7 +106,8 @@ class TelegramSessionController:
             session = self.sessions.pop(session_id, None)
             self._timers.pop(session_id, None)
 
-            if session:
+            if session and not session.get("_callback_fired"):
+                session["_callback_fired"] = True
                 callback:Callable|None = session.get("callback")
                 if callback:
                     if inspect.iscoroutinefunction(callback):
