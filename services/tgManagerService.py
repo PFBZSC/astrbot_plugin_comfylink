@@ -103,6 +103,10 @@ class TelegramManagerService:
     def __getitem__(self, item) -> TelegramInstance:
         return self.tg_insts[item]
 
+    def get(self, platform_id: str) -> TelegramInstance | None:
+        """安全获取 TelegramInstance，不存在时返回 None"""
+        return self.tg_insts.get(platform_id)
+
     def __contains__(self, platform_id) -> bool:
         return platform_id in self.tg_insts
 

@@ -77,7 +77,11 @@ class DrawService:
         platform_id = event.get_platform_id()
         if platform_id not in self.tg_mgr:
             self.tg_mgr.add_inst(event, self.context)
-        await self.tg_handler.start_flow(event, self.tg_mgr[platform_id])
+        tg_inst = self.tg_mgr.get(platform_id)
+        if tg_inst is None:
+            logger.error(f"[DrawService] 无法获取 Telegram 实例: {platform_id}")
+            return
+        await self.tg_handler.start_flow(event, tg_inst)
 
 
     @staticmethod

@@ -52,9 +52,12 @@ class MyPlugin(Star):
     async def test(self,event:AstrMessageEvent):
         event.stop_event()
         platform_id = event.get_platform_id()
-        if not platform_id in self.tg_mgr:
+        if platform_id not in self.tg_mgr:
             self.tg_mgr.add_inst(event,self.context)
-        tg_inst = self.tg_mgr[platform_id]
+        tg_inst = self.tg_mgr.get(platform_id)
+        if tg_inst is None:
+            logger.error(f"无法获取 Telegram 实例: {platform_id}")
+            return
 
         reply_markup = keyboard_build([
             ("选项A", "choice_A"),
