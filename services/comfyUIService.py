@@ -233,5 +233,12 @@ class ComfyUIService:
 
     async def close(self):
         """清理资源与后台任务"""
-        if self._ws_task:
+        self._stop_event.set()
+        self._reconnect_now.set()
+        if self._ws_task and not self._ws_task.done():
             self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except asyncio.CancelledError:
+                pass
+        self._ws_connected = False

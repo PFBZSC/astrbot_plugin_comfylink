@@ -72,4 +72,5 @@ class MyPlugin(Star):
         await update.callback_query.edit_message_text(f"你选择了：{value}")
 
     async def terminate(self):
+        await self.comfy_service.close()
         self.tg_mgr.terminate()
