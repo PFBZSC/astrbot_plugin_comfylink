@@ -130,7 +130,7 @@ class InteractiveDrawHandler:
         async def waiter(controller: SessionController, evt: AstrMessageEvent):
             user_input = evt.message_str.strip()
 
-            if user_input == "/stop":
+            if user_input == "stop":
                 await evt.send(evt.plain_result("已取消交互式绘图"))
                 controller.stop()
                 return
