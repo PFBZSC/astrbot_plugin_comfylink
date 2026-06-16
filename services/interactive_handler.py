@@ -159,13 +159,85 @@ class InteractiveDrawHandler:
         except TimeoutError:
             await event.send(event.plain_result("会话超时，请使用 /draw 重新开始"))
 
+    # ========== 阶段推进辅助方法 ==========
+
+    async def _advance_dialog(
+        self, event: AstrMessageEvent, controller: SessionController, state: dict,
+    ) -> None:
+        """弹出下一个对话框项并渲染菜单，或推进到提示词阶段"""
+        dialog_queue: list = state.get("_dialog_queue", [])
+
+        if dialog_queue:
+            dialog = dialog_queue.pop(0)
+            state["_stage"] = self.STAGE_DIALOG
+            text = dialog["text"]
+            option_names = [opt["name"] for opt in dialog.get("option", [])]
+            menu = self._render_numbered_menu(text, option_names)
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+        else:
+            # 无对话框项，直接进入提示词阶段
+            await self._advance_framework(event, controller, state)
+
+    async def _advance_framework(
+        self, event: AstrMessageEvent, controller: SessionController, state: dict,
+    ) -> None:
+        """进入提示词框架选择阶段（占位，后续 commit 实现）"""
+        state["_stage"] = self.STAGE_FRAMEWORK
+        await event.send(event.plain_result("（提示词阶段待实现）"))
+        controller.keep(timeout=120, reset_timeout=True)
+
     # ========== 阶段处理器（占位，后续 commit 实现） ==========
 
     async def _handle_config(
         self, event: AstrMessageEvent, controller: SessionController,
         state: dict, config_list: list, user_input: str,
     ) -> None:
-        pass
+        """阶段1：处理工作流配置选择，加载 core/workflows，进入对话框阶段"""
+        idx = self._parse_choice(user_input, len(config_list))
+        if idx is None:
+            menu = self._render_numbered_menu(
+                "输入无效，请重新选择工作流：",
+                [cfg["name"] for cfg in config_list],
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+            return
+
+        config = config_list[idx]
+        state["tg_config_name"] = config.get("name", "")
+        state["tg_config"] = config
+
+        # 通过 core_id 加载 core 配置
+        core_id = config.get("core_id")
+        if core_id is None:
+            await event.send(event.plain_result("配置错误：未找到 core_id"))
+            controller.stop()
+            return
+
+        state["core"] = self.storage.get_file("core", f"{core_id}.json")
+        if not state["core"]:
+            await event.send(event.plain_result(f"配置错误：无法加载 core 配置 '{core_id}'"))
+            controller.stop()
+            return
+
+        workflows_name = state["core"].get("workflows")
+        if not workflows_name:
+            await event.send(event.plain_result("配置错误：core 中未指定 workflows"))
+            controller.stop()
+            return
+
+        state["workflows"] = self.storage.get_file("workflows", workflows_name)
+        if not state["workflows"]:
+            await event.send(event.plain_result(f"配置错误：无法加载工作流 '{workflows_name}'"))
+            controller.stop()
+            return
+
+        # 复制对话框队列（不破坏原始数据）
+        state["_dialog_queue"] = list(config.get("dialog", []))
+
+        # 推进到对话框阶段
+        await self._advance_dialog(event, controller, state)
 
     async def _handle_dialog(
         self, event: AstrMessageEvent, controller: SessionController,
