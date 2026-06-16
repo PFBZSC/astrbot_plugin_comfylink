@@ -170,9 +170,13 @@ class InteractiveDrawHandler:
         if dialog_queue:
             dialog = dialog_queue.pop(0)
             state["_current_dialog"] = dialog
+            option_names = [opt["name"] for opt in dialog.get("option", [])]
+            if not option_names:
+                # 无选项的对话框项，跳过并继续
+                await self._advance_dialog(event, controller, state)
+                return
             state["_stage"] = self.STAGE_DIALOG
             text = dialog["text"]
-            option_names = [opt["name"] for opt in dialog.get("option", [])]
             menu = self._render_numbered_menu(text, option_names)
             await event.send(event.plain_result(menu))
             controller.keep(timeout=120, reset_timeout=True)
@@ -241,7 +245,7 @@ class InteractiveDrawHandler:
             # 无触发词，直接进入解析
             await self._do_parse_and_execute(event, controller, state)
 
-    # ========== 阶段处理器（占位，后续 commit 实现） ==========
+    # ========== 阶段处理器 ==========
 
     async def _handle_config(
         self, event: AstrMessageEvent, controller: SessionController,
