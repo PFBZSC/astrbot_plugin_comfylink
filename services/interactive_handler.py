@@ -183,10 +183,63 @@ class InteractiveDrawHandler:
     async def _advance_framework(
         self, event: AstrMessageEvent, controller: SessionController, state: dict,
     ) -> None:
-        """进入提示词框架选择阶段（占位，后续 commit 实现）"""
-        state["_stage"] = self.STAGE_FRAMEWORK
-        await event.send(event.plain_result("（提示词阶段待实现）"))
-        controller.keep(timeout=120, reset_timeout=True)
+        """进入提示词框架选择阶段"""
+        # 懒加载 system.json
+        if state.get("system_prompt") is None:
+            state["system_prompt"] = self.storage.get_file("prompt", "system.json") or {}
+            trigger_list = state["system_prompt"].get("trigger")
+            state["_trigger_queue"] = list(trigger_list) if trigger_list else []
+
+        system_prompt: dict = state["system_prompt"]
+        framework_list = system_prompt.get("framework", [])
+        if framework_list:
+            state["_stage"] = self.STAGE_FRAMEWORK
+            menu = self._render_numbered_menu(
+                "选择提示词框架：",
+                [fw["name"] for fw in framework_list],
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+        else:
+            # 无框架配置，直接进入描述阶段
+            await self._advance_description(event, controller, state)
+
+    async def _advance_description(
+        self, event: AstrMessageEvent, controller: SessionController, state: dict,
+    ) -> None:
+        """进入提示词描述选择阶段"""
+        system_prompt: dict = state.get("system_prompt", {})
+        description_list = system_prompt.get("description", [])
+        if description_list:
+            state["_stage"] = self.STAGE_DESCRIPTION
+            menu = self._render_numbered_menu(
+                "选择提示词描述：",
+                [desc["name"] for desc in description_list],
+                include_skip=True,
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+        else:
+            # 无描述配置，直接进入触发词阶段
+            await self._advance_trigger(event, controller, state)
+
+    async def _advance_trigger(
+        self, event: AstrMessageEvent, controller: SessionController, state: dict,
+    ) -> None:
+        """进入触发词选择阶段"""
+        trigger_queue: list = state.get("_trigger_queue", [])
+        if trigger_queue:
+            state["_stage"] = self.STAGE_TRIGGER
+            menu = self._render_numbered_menu(
+                "选择提示词触发词：",
+                [tr["name"] for tr in trigger_queue],
+                include_skip=True,
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+        else:
+            # 无触发词，直接进入解析
+            await self._do_parse_and_execute(event, controller, state)
 
     # ========== 阶段处理器（占位，后续 commit 实现） ==========
 
@@ -272,19 +325,82 @@ class InteractiveDrawHandler:
         self, event: AstrMessageEvent, controller: SessionController,
         state: dict, user_input: str,
     ) -> None:
-        pass
+        """阶段3：处理提示词框架选择，累积到 input_prompt，进入描述阶段"""
+        system_prompt: dict = state.get("system_prompt", {})
+        framework_list = system_prompt.get("framework", [])
+
+        idx = self._parse_choice(user_input, len(framework_list))
+        if idx is None:
+            menu = self._render_numbered_menu(
+                "输入无效，请重新选择提示词框架：",
+                [fw["name"] for fw in framework_list],
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+            return
+
+        state["input_prompt"] = framework_list[idx]["text"]
+        await self._advance_description(event, controller, state)
 
     async def _handle_description(
         self, event: AstrMessageEvent, controller: SessionController,
         state: dict, user_input: str,
     ) -> None:
-        pass
+        """阶段4：处理提示词描述选择（含跳过），累积到 input_prompt，进入触发词阶段"""
+        system_prompt: dict = state.get("system_prompt", {})
+        description_list = system_prompt.get("description", [])
+        skip_idx = len(description_list)  # "跳过"对应的 0-based 索引
+
+        idx = self._parse_choice(user_input, len(description_list) + 1)
+        if idx is None:
+            menu = self._render_numbered_menu(
+                "输入无效，请重新选择提示词描述：",
+                [desc["name"] for desc in description_list],
+                include_skip=True,
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+            return
+
+        if idx != skip_idx:
+            state["input_prompt"] = parser.smart_format(
+                state.get("input_prompt", ""), description_list[idx]["text"]
+            )
+
+        await self._advance_trigger(event, controller, state)
 
     async def _handle_trigger(
         self, event: AstrMessageEvent, controller: SessionController,
         state: dict, user_input: str,
     ) -> None:
-        pass
+        """阶段5：处理触发词选择（含跳过），可循环多轮，队列空则进入解析"""
+        trigger_queue: list = state.get("_trigger_queue", [])
+        skip_idx = len(trigger_queue)
+
+        idx = self._parse_choice(user_input, len(trigger_queue) + 1)
+        if idx is None:
+            menu = self._render_numbered_menu(
+                "输入无效，请重新选择触发词：",
+                [tr["name"] for tr in trigger_queue],
+                include_skip=True,
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+            return
+
+        if idx == skip_idx:
+            # 跳过剩余触发词，直接解析
+            await self._do_parse_and_execute(event, controller, state)
+            return
+
+        # 应用选中的触发词
+        trigger = trigger_queue.pop(idx)
+        state["input_prompt"] = parser.smart_format(
+            state.get("input_prompt", ""), trigger["text"]
+        )
+
+        # 继续展示剩余触发词或进入解析
+        await self._advance_trigger(event, controller, state)
 
     async def _do_parse_and_execute(
         self, event: AstrMessageEvent, controller: SessionController, state: dict,
