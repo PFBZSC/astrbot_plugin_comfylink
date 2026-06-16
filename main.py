@@ -53,7 +53,7 @@ class MyPlugin(Star):
         event.stop_event()
         platform_id = event.get_platform_id()
         if platform_id not in self.tg_mgr:
-            self.tg_mgr.add_inst(event,self.context)
+            await self.tg_mgr.add_inst(event,self.context)
         tg_inst = self.tg_mgr.get(platform_id)
         if tg_inst is None:
             logger.error(f"无法获取 Telegram 实例: {platform_id}")

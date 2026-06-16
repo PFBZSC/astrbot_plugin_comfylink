@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context
 from astrbot.core.platform.sources.telegram.tg_adapter import TelegramPlatformAdapter
@@ -15,6 +17,7 @@ class TelegramManagerService:
     def __init__(self):
         self.tg_insts:dict[str,TelegramInstance] = {} # platform_id : TelegramInstance
         self.callback_routes = {} # { command : ( instance, method ) }
+        self._lock = asyncio.Lock()
 
     def register_routes(self, instance):
         """
@@ -60,23 +63,24 @@ class TelegramManagerService:
             except (AttributeError, TypeError):
                 continue
 
-    def add_inst(self,event:AstrMessageEvent,context:Context) -> TelegramInstance|None:
+    async def add_inst(self,event:AstrMessageEvent,context:Context) -> TelegramInstance|None:
         platform_id = event.get_platform_id()
 
-        if self.tg_insts.get(platform_id,None):
-            logger.warn(f"[TelegramManagerService] platform_id:{platform_id} 的TelegramInstance已存在，已避免重复创建")
+        async with self._lock:
+            # 锁内双重检查，防止并发重复创建
+            if self.tg_insts.get(platform_id,None):
+                logger.warn(f"[TelegramManagerService] platform_id:{platform_id} 的TelegramInstance已存在，已避免重复创建")
+                return self.tg_insts[platform_id]
+
+            platform = context.get_platform_inst(platform_id)
+            if not isinstance(platform, TelegramPlatformAdapter):
+                logger.error(f"[TelegramManagerService] platform_id:{platform_id} 不是TelegramPlatformAdapter")
+                return None
+
+            #实例化TelegramInstance
+            self.tg_insts[platform_id] = TelegramInstance(platform_id,platform,self)
+            logger.info(f"[TelegramManagerService] 已创建platform_id:{platform_id} TelegramInstance实例化")
             return self.tg_insts[platform_id]
-
-        platform = context.get_platform_inst(platform_id)
-        if not isinstance(platform, TelegramPlatformAdapter):
-            logger.error(f"[TelegramManagerService] platform_id:{platform_id} 不是TelegramPlatformAdapter")
-            return None
-
-
-        #实例化TelegramInstance
-        self.tg_insts[platform_id] = TelegramInstance(platform_id,platform,self)
-        logger.info(f"[TelegramManagerService] 已创建platform_id:{platform_id} TelegramInstance实例化")
-        return self.tg_insts[platform_id]
 
     def terminate(self):
         self._del_all_inst()
