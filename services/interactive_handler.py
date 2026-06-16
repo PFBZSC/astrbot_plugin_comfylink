@@ -405,4 +405,35 @@ class InteractiveDrawHandler:
     async def _do_parse_and_execute(
         self, event: AstrMessageEvent, controller: SessionController, state: dict,
     ) -> None:
-        pass
+        """阶段6：组装所有数据 → parser.parse_data() → 执行 ComfyUI 工作流"""
+        core = state.get("core")
+        workflows = state.get("workflows")
+        var_list = state.get("var_list")
+        prompt = state.get("input_prompt", "")
+
+        parsed_data = parser.parse_data(core.get("commands", ""), prompt, var_list, [core])
+        if not parsed_data:
+            await event.send(event.plain_result("解析配置时出现错误，请检查配置"))
+            controller.stop()
+            return
+
+        listen_node = [each.id for each in parsed_data.outputs]
+        logger.info(f"[InteractiveDrawHandler] 监听节点：{listen_node}")
+
+        # 结束文本交互会话
+        controller.stop()
+
+        # 是否需要上传图片
+        if inputs_images := parsed_data.inputs_images:
+            await event.send(event.plain_result("参数记录完毕，请上传图片"))
+            final_images = await self.draw_service._collect_images(event, inputs_images)
+            if not final_images:
+                return
+            parsed_data.inputs_images = final_images
+
+        final_workflows = parser.parse_comfy_data(parsed_data, workflows)
+        logger.info(f"[InteractiveDrawHandler] core: {core}")
+        logger.info(f"[InteractiveDrawHandler] parsed_data: {parsed_data}")
+        await self.draw_service._execute_and_send(
+            event, final_workflows, listen_node, parsed_data.outputs,
+        )
