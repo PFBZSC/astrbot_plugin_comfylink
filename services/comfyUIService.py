@@ -128,8 +128,14 @@ class ComfyUIService:
 
         try:
             # 持续从队列消费并抛出，直到收到结束信号
+            # 如果 WS 监听器已死，600s 超时防止永久挂起
             while True:
-                result = await queue.get()
+                try:
+                    result = await asyncio.wait_for(queue.get(), timeout=600)
+                except asyncio.TimeoutError:
+                    raise Exception(
+                        "ComfyUI 响应超时，请检查 ComfyUI 是否正常运行"
+                    )
 
                 if result["type"] == "done":
                     break  # 任务彻底结束，退出生成器
