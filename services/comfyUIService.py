@@ -26,12 +26,32 @@ class ComfyUIService:
         self._stop_event = asyncio.Event()
         # 可观测的 WS 连接状态
         self._ws_connected = False
+        # 立即重连信号：health_check 成功时 set，打断 backoff sleep
+        self._reconnect_now = asyncio.Event()
 
     async def start_listening(self):
         """启动全局的 WebSocket 监听，若已死亡则自动重建"""
         if self._ws_task is None or self._ws_task.done():
             self._stop_event.clear()
             self._ws_task = asyncio.create_task(self._listen_ws())
+
+    async def health_check(self) -> bool:
+        """检测 ComfyUI 是否可达
+
+        成功后发送 _reconnect_now 信号，让 backoff sleep 中的
+        _listen_ws 立即醒来重连。
+        """
+        try:
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as session:
+                async with session.get(f"{self.http_url}/") as resp:
+                    if resp.status < 500:
+                        self._reconnect_now.set()
+                        return True
+                    return False
+        except Exception:
+            return False
 
     async def _listen_ws(self):
         """后台持续接收 ComfyUI 的广播，支持断线重连与指数退避"""
@@ -92,16 +112,23 @@ class ComfyUIService:
                     f"[ComfyUI] WebSocket 连接断开: {e}，{backoff}s 后重试..."
                 )
 
-            # 退避等待（可被 stop_event 或 reconnect_now 打断）
+            # 退避等待，可被 stop_event 或 reconnect_now 打断
             if not self._stop_event.is_set():
-                try:
-                    await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=backoff
-                    )
-                    # stop_event 被 set，退出循环
+                stop_task = asyncio.create_task(self._stop_event.wait())
+                reconnect_task = asyncio.create_task(self._reconnect_now.wait())
+                await asyncio.wait(
+                    [stop_task, reconnect_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                    timeout=backoff,
+                )
+                # 清理未完成的任务
+                for t in [stop_task, reconnect_task]:
+                    if not t.done():
+                        t.cancel()
+                self._reconnect_now.clear()
+
+                if self._stop_event.is_set():
                     break
-                except asyncio.TimeoutError:
-                    pass  # 正常超时，继续重连
 
                 backoff = min(backoff * 2, max_backoff)
 
