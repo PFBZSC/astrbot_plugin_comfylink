@@ -19,7 +19,6 @@ from .services.comfyUIService import ComfyUIService
 class MyPlugin(Star):
     def __init__(self, context: Context,config: AstrBotConfig):
         super().__init__(context)
-        logger.info("MyPlugin 初始化开始")
         self.config = config
 
         self.storage = Storage(self.name)

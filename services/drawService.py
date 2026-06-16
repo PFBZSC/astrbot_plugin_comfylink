@@ -51,7 +51,6 @@ class DrawService:
 
         if parsed_result.data is None:# 无参调用
             if event.get_platform_name() == "telegram":
-                # TODO:Telegram
                 await self._handle_telegram(event)
             else:
                 await event.send(event.plain_result("当前仅支持telegram平台"))
