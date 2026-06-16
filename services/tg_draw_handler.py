@@ -156,6 +156,11 @@ class TgDrawHandler:
                 logger.error(f"[TgDrawHandler] 未知命令: {command}")
         except Exception:
             logger.exception(f"[TgDrawHandler] 执行 handler 时发生异常, command={command}")
+            await self.tg_sc.close_session(session_id)
+            try:
+                await update.callback_query.edit_message_text("处理请求时发生错误，请重试")
+            except Exception:
+                pass
 
     # ========== 阶段 1: 配置加载 ==========
 
@@ -346,17 +351,26 @@ class TgDrawHandler:
 
             # 放入后台任务防阻塞
             async def process_and_send():
-                final_images = await self.draw_service._collect_images(event, inputs_images)
-                if not final_images:
-                    return
-                parsed_data.inputs_images = final_images
-                final_workflows = parser.parse_comfy_data(parsed_data, workflows)
-                logger.info(f"[TgDrawHandler] 监听节点：{listen_node}")
-                logger.info(f"[TgDrawHandler] core: {core}")
-                logger.info(f"[TgDrawHandler] parsed_data: {parsed_data}")
-                await self.draw_service._execute_and_send_tg(
-                    update, final_workflows, listen_node, parsed_data.outputs
-                )
+                try:
+                    final_images = await self.draw_service._collect_images(event, inputs_images)
+                    if not final_images:
+                        return
+                    parsed_data.inputs_images = final_images
+                    final_workflows = parser.parse_comfy_data(parsed_data, workflows)
+                    logger.info(f"[TgDrawHandler] 监听节点：{listen_node}")
+                    logger.info(f"[TgDrawHandler] core: {core}")
+                    logger.info(f"[TgDrawHandler] parsed_data: {parsed_data}")
+                    await self.draw_service._execute_and_send_tg(
+                        update, final_workflows, listen_node, parsed_data.outputs
+                    )
+                except Exception as e:
+                    logger.exception(f"[TgDrawHandler] 后台执行失败: {e}")
+                    try:
+                        await update.effective_sender.send_message(
+                            f"处理失败: {str(e)}"
+                        )
+                    except Exception:
+                        pass
 
             asyncio.create_task(process_and_send())
         else:
