@@ -43,6 +43,13 @@ class DrawService:
         self.tg_handler.register()
         self.tg_mgr.register_routes(self)
 
+        from ..services.interactive_handler import InteractiveDrawHandler
+        self.interactive_handler = InteractiveDrawHandler(
+            storage=storage,
+            comfy_service=comfy_service,
+            draw_service=self,
+        )
+
     # ========== 主入口 路由 ==========
     async def handle_draw(self, event:AstrMessageEvent, parsed_result:ParsedResult):
         if not parsed_result.success:# 指令调用
@@ -53,7 +60,7 @@ class DrawService:
             if event.get_platform_name() == "telegram":
                 await self._handle_telegram(event)
             else:
-                await event.send(event.plain_result("当前仅支持telegram平台"))
+                await self.interactive_handler.start_flow(event)
 
         else:
             await self._handle_standard(event, parsed_result.data)
