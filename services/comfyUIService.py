@@ -32,7 +32,7 @@ class ComfyUIService:
 
     async def _listen_ws(self):
         """后台持续接收 ComfyUI 的广播，并精准唤醒对应的挂起任务"""
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
             async with session.ws_connect(f"{self.ws_url}?clientId={self.client_id}") as ws:
                 async for msg in ws:
                     if msg.type == aiohttp.WSMsgType.TEXT:
@@ -72,7 +72,7 @@ class ComfyUIService:
         """提交任务，并逐个 yield 产出监听节点的执行结果"""
         payload = {"prompt": workflow_data, "client_id": self.client_id}
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
             async with session.post(f"{self.http_url}/prompt", json=payload) as resp:
                 reply = await resp.json()
                 if "error" in reply:
@@ -107,13 +107,13 @@ class ComfyUIService:
 
     async def query(self, prompt_id: str):
         """查询特定任务的详细历史信息"""
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
             async with session.get(f"{self.http_url}/history/{prompt_id}") as resp:
                 return await resp.json()
 
     async def stop(self):
         """中断当前 ComfyUI 正在执行的任务"""
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
             async with session.post(f"{self.http_url}/interrupt") as resp:
                 return resp.status == 200
 
@@ -139,7 +139,7 @@ class ComfyUIService:
         data.add_field('image', image_bytes, filename=filename, content_type=mime)
         data.add_field('overwrite', 'true')
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
             async with session.post(f"{self.http_url}/upload/image", data=data) as resp:
                 return await resp.json()
 
@@ -150,7 +150,7 @@ class ComfyUIService:
             "subfolder": subfolder,
             "type": folder_type
         }
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=self._http_timeout) as session:
             # 发起 GET 请求拉取图片文件
             async with session.get(f"{self.http_url}/view", params=params) as resp:
                 if resp.status == 200:
