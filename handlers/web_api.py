@@ -23,6 +23,8 @@ class WebApiHandler:
 
     async def save_item(self):
         req = await request.get_json()
+        if req is None:
+            return jsonify({"error": "请求体不能为空"}), 400
         category = req.get("category")
         filename = req.get("filename")
         data = req.get("data")
@@ -33,6 +35,8 @@ class WebApiHandler:
 
     async def delete_item(self):
         req = await request.get_json()
+        if req is None:
+            return jsonify({"error": "请求体不能为空"}), 400
         category = req.get("category")
         filename = req.get("filename")
 

@@ -118,28 +118,45 @@ def parse_comfy_data(data: CommandParsedData, workflows: dict) -> dict:
     if not workflows:
         return {}
     for each in data.inputs_texts:
-        workflows[each.id]["inputs"][each.key_name] = each.value
+        node = workflows.get(each.id)
+        if node and "inputs" in node:
+            node["inputs"][each.key_name] = each.value
     for each in data.inputs_images:
-        workflows[each.id]["inputs"][each.key_name] = each.value
+        node = workflows.get(each.id)
+        if node and "inputs" in node:
+            node["inputs"][each.key_name] = each.value
     return workflows
 
 def parse_node_result(outputs: List[OutputItem], source: dict) -> Optional[ComfyNodeResult]:
-    source = source[id := list(source.keys())[0]]  # type:{...}
+    if not source or not isinstance(source, dict):
+        return None
+    keys = list(source.keys())
+    if not keys:
+        return None
+    node_id = keys[0]
+    node_data = source.get(node_id)
+    if not isinstance(node_data, dict):
+        return None
+
     node = None
-    for each in outputs:
-        if each.id == id:
+    for each in (outputs or []):
+        if each.id == node_id:
             node = each
             break
     if not node:
         return None
     if node.type == "images":
-        # TODO 逻辑优化
-        tmp = source["images"][0]
+        images = node_data.get("images")
+        if not images or not isinstance(images, list):
+            return None
+        tmp = images[0]
         content = (tmp["filename"], tmp["subfolder"], tmp["type"])
         return ComfyNodeResult(msg_type="images",content = content ,text=node.text)
     elif node.type == "text":
-        # TODO 逻辑优化
-        tmp = source["text"][0]
+        texts = node_data.get("text")
+        if not texts or not isinstance(texts, list):
+            return None
+        tmp = texts[0]
         return ComfyNodeResult(msg_type="text",content=tmp,text = node.text)
     return None
 

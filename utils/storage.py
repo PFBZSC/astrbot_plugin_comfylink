@@ -46,16 +46,20 @@ class Storage:
         return result
 
     def save_item(self, category: str, filename: str, data: dict) -> bool:
-        """保存单条 JSON 数据"""
+        """保存单条 JSON 数据（原子写入：先写 .tmp 再重命名）"""
         if category not in self.dirs:
             return False
 
         file_path = self.dirs[category] / filename
+        tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
         try:
-            with open(file_path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            tmp_path.replace(file_path)  # 原子重命名
             return True
         except Exception:
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
             return False
 
     def save_file(self, category: str, filename: str, data) -> bool:
@@ -121,9 +125,11 @@ class Storage:
 
     def get_temp_img(self,file_path):
         '''获取指定img文件'''
-        # TODO 安全校验
         try:
-            with open(file_path, "rb") as f:
+            resolved = Path(file_path).resolve()
+            if not resolved.is_file():
+                return None
+            with open(resolved, "rb") as f:
                 return f.read()
         except Exception:
             return None
