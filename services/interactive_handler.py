@@ -169,6 +169,7 @@ class InteractiveDrawHandler:
 
         if dialog_queue:
             dialog = dialog_queue.pop(0)
+            state["_current_dialog"] = dialog
             state["_stage"] = self.STAGE_DIALOG
             text = dialog["text"]
             option_names = [opt["name"] for opt in dialog.get("option", [])]
@@ -243,7 +244,29 @@ class InteractiveDrawHandler:
         self, event: AstrMessageEvent, controller: SessionController,
         state: dict, user_input: str,
     ) -> None:
-        pass
+        """阶段2：处理对话框变量选择，记录 var_list，继续下一个对话框项"""
+        current_dialog: dict = state.get("_current_dialog", {})
+        options: list = current_dialog.get("option", [])
+
+        idx = self._parse_choice(user_input, len(options))
+        if idx is None:
+            text = current_dialog.get("text", "")
+            option_names = [opt["name"] for opt in options]
+            menu = self._render_numbered_menu(
+                f"输入无效，请重新选择：\n{text}", option_names,
+            )
+            await event.send(event.plain_result(menu))
+            controller.keep(timeout=120, reset_timeout=True)
+            return
+
+        # 记录变量
+        option = options[idx]
+        if state.get("var_list") is None:
+            state["var_list"] = []
+        state["var_list"].append([option.get("var_name", ""), option.get("value", "")])
+
+        # 继续下一个对话框项
+        await self._advance_dialog(event, controller, state)
 
     async def _handle_framework(
         self, event: AstrMessageEvent, controller: SessionController,
