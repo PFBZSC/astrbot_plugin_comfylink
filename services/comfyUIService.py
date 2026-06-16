@@ -28,8 +28,9 @@ class ComfyUIService:
         self._ws_connected = False
 
     async def start_listening(self):
-        """启动全局的 WebSocket 监听（在发送任何任务前调用即可）"""
-        if self._ws_task is None:
+        """启动全局的 WebSocket 监听，若已死亡则自动重建"""
+        if self._ws_task is None or self._ws_task.done():
+            self._stop_event.clear()
             self._ws_task = asyncio.create_task(self._listen_ws())
 
     async def _listen_ws(self):
