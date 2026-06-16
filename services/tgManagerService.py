@@ -142,7 +142,6 @@ class TelegramInstance:
 
 
     async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        logger.info("触发_handle_callback")
         query = update.callback_query
         data:str|None = getattr(query,"data",None)
         if not (data and ":" in data):
